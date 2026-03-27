@@ -21,10 +21,6 @@ jobs:
       run:
         working-directory: client
 
-    env:
-      HAS_GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
-      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,10 +33,10 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
+      # ✅ THE FIX IS HERE — channel only, flutter-version removed entirely
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "stable"
           channel: "stable"
           cache: true
 
@@ -69,8 +65,6 @@ jobs:
           [ -n "${{ secrets.SUPABASE_URL }}" ]      && echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}"           >> .env || true
           [ -n "${{ secrets.SUPABASE_ANON_KEY }}" ] && echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env || true
 
-      # ── google-services.json ──────────────────────────────────────
-      # Uses a shell check instead of secrets context in `if:`
       - name: Write google-services.json
         run: |
           if [ -n "$GSVC" ]; then
@@ -82,7 +76,6 @@ jobs:
         env:
           GSVC: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
-      # ── Keystore ──────────────────────────────────────────────────
       - name: Decode and place keystore
         run: |
           if [ -n "$KS_B64" ]; then
@@ -95,7 +88,7 @@ jobs:
           EOF
             echo "Keystore written."
           else
-            echo "No KEYSTORE_BASE64 secret — building unsigned."
+            echo "Building unsigned."
           fi
         env:
           KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
