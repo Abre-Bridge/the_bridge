@@ -58,6 +58,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
 
 flutter:
   uses-material-design: true
@@ -76,3 +78,22 @@ flutter:
           weight: 600
         - asset: fonts/Inter-Bold.ttf
           weight: 700
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_icon.png"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#0F0F23"
+  color_dark: "#0F0F23"
+  image: "assets/images/logo_splash.png"
+  image_dark: "assets/images/logo_splash.png"
+  android: true
+  ios: true
+  android_12:
+    color: "#0F0F23"
+    color_dark: "#0F0F23"
+    image: "assets/images/logo_splash.png"
+    image_dark: "assets/images/logo_splash.png"

@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
-        android:label="thebridge_client"
+        android:label="TheBridge"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
