@@ -66,5 +66,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>TheBridge needs camera access for video meetings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TheBridge needs microphone access for voice and video meetings.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TheBridge needs local network access to discover and connect to other devices on your LAN.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_thebridge._tcp</string>
+		<string>_http._tcp</string>
+	</array>
 </dict>
 </plist>
+

@@ -374,7 +374,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               controller: controller,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
-                hintText: 'http://192.168.1.100:3000',
+                hintText: 'http://192.168.204.92:3000',
                 prefixIcon: Icon(Icons.link, size: 20),
               ),
             ),

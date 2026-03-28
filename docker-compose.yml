@@ -28,8 +28,8 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-miniosecret}
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_me}
       - TURN_SECRET=${TURN_SECRET:-turnsecret}
-      - TURN_SERVER=turn:thebridge-turn:3478
-      - STUN_SERVER=stun:thebridge-turn:3478
+      - TURN_SERVER=turn:192.168.204.92:3478
+      - STUN_SERVER=stun:192.168.204.92:3478
     depends_on:
       thebridge-postgres:
         condition: service_healthy

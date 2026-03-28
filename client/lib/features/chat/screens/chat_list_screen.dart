@@ -37,7 +37,7 @@ class ChatListScreen extends ConsumerWidget {
                         onlineUsersAsync.when(
                           data: (users) => _buildStatusIndicator(users.length),
                           loading: () => const SizedBox(width: 8, height: 8),
-                          error: (_, __) => _buildStatusIndicator(0),
+                          error: (_, _) => _buildStatusIndicator(0),
                         ),
                       ],
                     ),

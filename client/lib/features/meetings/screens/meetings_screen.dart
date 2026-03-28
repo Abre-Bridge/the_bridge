@@ -1,13 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/providers/meeting_provider.dart';
 import '../../../core/widgets/glass_widgets.dart';
 
-class MeetingsScreen extends StatelessWidget {
+class MeetingsScreen extends ConsumerStatefulWidget {
   const MeetingsScreen({super.key});
 
   @override
+  ConsumerState<MeetingsScreen> createState() => _MeetingsScreenState();
+}
+
+class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
+
+  @override
   Widget build(BuildContext context) {
+    final meetingState = ref.watch(meetingStateProvider);
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -15,126 +26,227 @@ class MeetingsScreen extends StatelessWidget {
           // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Text(
-              'Meetings',
-              style: Theme.of(context).textTheme.displayMedium,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Meetings',
+                  style: Theme.of(context).textTheme.displayMedium,
+                ),
+                if (meetingState.isJoined)
+                  IconButton(
+                    onPressed: () => ref.read(meetingStateProvider.notifier).leaveMeeting(),
+                    icon: const Icon(Icons.call_end_rounded, color: AppTheme.busy),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.busy.withValues(alpha: 0.1),
+                    ),
+                  ),
+              ],
             ),
           ).animate().fadeIn(duration: 400.ms),
 
           const SizedBox(height: 20),
 
-          // Quick actions
-          Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildQuickAction(
-                        icon: Icons.videocam_rounded,
-                        label: 'Start\nMeeting',
-                        gradient: [AppTheme.primaryStart, AppTheme.primaryEnd],
-                        onTap: () {},
-                      ),
+          if (meetingState.isJoined)
+             Expanded(child: _buildMeetingRoom(meetingState))
+          else ...[
+            // Quick actions
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.videocam_rounded,
+                      label: 'Start\nMeeting',
+                      gradient: [AppTheme.primaryStart, AppTheme.primaryEnd],
+                      onTap: () => _handleStartMeeting(),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildQuickAction(
-                        icon: Icons.add_link_rounded,
-                        label: 'Join\nMeeting',
-                        gradient: [AppTheme.accentCyan, AppTheme.accentTeal],
-                        onTap: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildQuickAction(
-                        icon: Icons.schedule_rounded,
-                        label: 'Schedule\nMeeting',
-                        gradient: [
-                          const Color(0xFFF59E0B),
-                          const Color(0xFFEF4444),
-                        ],
-                        onTap: () {},
-                      ),
-                    ),
-                  ],
-                ),
-              )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 200.ms)
-              .slideY(begin: 0.1),
-
-          const SizedBox(height: 24),
-
-          // Active meetings
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: AppTheme.busy,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.busy.withValues(alpha: 0.6),
-                        blurRadius: 6,
-                      ),
-                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'ACTIVE NOW',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textMuted,
-                    letterSpacing: 1.2,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.add_link_rounded,
+                      label: 'Join\nMeeting',
+                      gradient: [AppTheme.accentCyan, AppTheme.accentTeal],
+                      onTap: () => _handleJoinMeeting(),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.schedule_rounded,
+                      label: 'Schedule\nMeeting',
+                      gradient: [
+                        const Color(0xFFF59E0B),
+                        const Color(0xFFEF4444),
+                      ],
+                      onTap: () {},
+                    ),
+                  ),
+                ],
+              ),
+            )
+            .animate()
+            .fadeIn(duration: 500.ms, delay: 200.ms)
+            .slideY(begin: 0.1),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 24),
 
-          // Active meeting card
-          Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildActiveMeetingCard(context),
-              )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 300.ms)
-              .slideY(begin: 0.1),
-
-          const SizedBox(height: 24),
-
-          // Upcoming
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'UPCOMING',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textMuted,
-                letterSpacing: 1.2,
+            // Active meetings
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: AppTheme.busy,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.busy.withValues(alpha: 0.6),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ACTIVE NOW',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMuted,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            const SizedBox(height: 12),
+
+            // Active meeting card
+            Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildActiveMeetingCard(context),
+                )
+                .animate() // This will still work if flutter_animate is imported in child or global
+                .fadeIn(duration: 500.ms, delay: 300.ms)
+                .slideY(begin: 0.1),
+
+            const SizedBox(height: 24),
+
+            // Upcoming
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'UPCOMING',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMuted,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _upcomingMeetings.length,
+                itemBuilder: (context, index) {
+                  return _buildUpcomingTile(_upcomingMeetings[index], index);
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _handleStartMeeting() {
+    final roomId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+    ref.read(meetingStateProvider.notifier).joinMeeting(roomId);
+  }
+
+  void _handleJoinMeeting() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        title: const Text('Join Meeting'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter Room ID'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                ref.read(meetingStateProvider.notifier).joinMeeting(controller.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Join'),
           ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(height: 12),
+  Widget _buildMeetingRoom(MeetingState state) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text('Room ID: ${state.roomId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        Expanded(
+          child: GridView.count(
+            crossAxisCount: 2,
+            children: [
+              // Local video
+              _buildVideoTile(state.localRenderer, 'Me (Local)'),
+              // Remote videos
+              ...state.remoteRenderers.entries.map((e) {
+                return _buildVideoTile(e.value, 'User ${e.key.substring(0, 4)}');
+              }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _upcomingMeetings.length,
-              itemBuilder: (context, index) {
-                return _buildUpcomingTile(_upcomingMeetings[index], index);
-              },
+  Widget _buildVideoTile(RTCVideoRenderer renderer, String label) {
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.glassBorder),
+      ),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: RTCVideoView(renderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
+          ),
+          Positioned(
+            bottom: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+              child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 10)),
             ),
           ),
         ],

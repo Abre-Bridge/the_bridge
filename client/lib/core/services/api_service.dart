@@ -10,7 +10,7 @@ class ApiService {
 
   late Dio _dio;
   String? _token;
-  String _baseUrl = 'http://localhost:3000';
+  String _baseUrl = 'http://192.168.204.92:3000';
 
   Future<void> initialize({String? serverUrl}) async {
     if (serverUrl != null) _baseUrl = serverUrl;

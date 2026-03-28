@@ -15,6 +15,7 @@ dependencies:
   # Networking
   socket_io_client: ^3.0.2
   dio: ^5.4.0
+  crypto: ^3.0.3
   multicast_dns: ^0.3.2+6
 
   # State Management

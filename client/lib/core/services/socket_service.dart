@@ -11,7 +11,7 @@ class SocketService {
   io.Socket? _signalingSocket;
   io.Socket? _fileSocket;
 
-  String _serverUrl = 'http://localhost:3000';
+  String _serverUrl = 'http://192.168.204.92:3000';
   String? _token;
 
   // Stream controllers for events
@@ -170,8 +170,8 @@ class SocketService {
 
   void stopTyping({String? channelId, String? receiverId}) {
     _messagingSocket?.emit('typing:stop', {
-      'channelId': ?channelId,
-      'receiverId': ?receiverId,
+      'channelId': channelId,
+      'receiverId': receiverId,
     });
   }
 
@@ -230,6 +230,45 @@ class SocketService {
   void disconnectFileTransfer() {
     _fileSocket?.disconnect();
     _fileSocket = null;
+  }
+
+  void requestFileTransfer({
+    required String receiverId,
+    required String fileName,
+    required int fileSize,
+    required String fileType,
+    required String fileHash,
+    required Function(Map<String, dynamic>) onResponse,
+  }) {
+    _fileSocket?.emitWithAck('file:request', {
+      'receiverId': receiverId,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'fileType': fileType,
+      'fileHash': fileHash,
+    }, ack: (data) => onResponse(Map<String, dynamic>.from(data)));
+  }
+
+  void sendFileChunk({
+    required String transferId,
+    required int chunkIndex,
+    required List<int> chunkData,
+    required bool isLast,
+  }) {
+    _fileSocket?.emit('file:chunk', {
+      'transferId': transferId,
+      'chunkIndex': chunkIndex,
+      'chunkData': chunkData,
+      'isLast': isLast,
+    });
+  }
+
+  void acceptFileTransfer(String transferId) {
+    _fileSocket?.emit('file:accept', {'transferId': transferId});
+  }
+
+  void rejectFileTransfer(String transferId) {
+    _fileSocket?.emit('file:reject', {'transferId': transferId});
   }
 
   // ========== LIFECYCLE ==========

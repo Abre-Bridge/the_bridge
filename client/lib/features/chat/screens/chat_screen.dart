@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
 import '../../../core/providers/chat_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/file_provider.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -304,10 +305,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
-                      onPressed: () {},
+                      onPressed: () => ref.read(fileProvider.notifier).sendFile(widget.chatId),
                       icon: const Icon(
                         Icons.add_rounded,
-                        color: AppTheme.textSecondary,
+                        color: AppTheme.primaryStart,
                         size: 22,
                       ),
                       padding: const EdgeInsets.all(8),
