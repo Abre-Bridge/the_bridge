@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+    final apiService = ref.watch(apiServiceProvider);
+
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -29,7 +35,7 @@ class SettingsScreen extends StatelessWidget {
                   child: Row(
                     children: [
                       UserAvatar(
-                        displayName: 'John Developer',
+                        displayName: user?['display_name'] ?? user?['username'] ?? 'User',
                         status: 'online',
                         size: 56,
                       ),
@@ -38,18 +44,18 @@ class SettingsScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'John Developer',
-                              style: TextStyle(
+                            Text(
+                              user?['display_name'] ?? 'User',
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 color: AppTheme.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              '@johnd',
-                              style: TextStyle(
+                            Text(
+                              '@${user?['username'] ?? "username"}',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: AppTheme.textMuted,
                               ),
@@ -76,7 +82,7 @@ class SettingsScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Icon(
+                      const Icon(
                         Icons.edit_outlined,
                         color: AppTheme.textMuted,
                         size: 20,
@@ -124,10 +130,7 @@ class SettingsScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoRow('Address', '192.168.1.100:3000'),
-                  _buildInfoRow('Latency', '2ms'),
-                  _buildInfoRow('Online Users', '12'),
-                  _buildInfoRow('Active Meetings', '2'),
+                  _buildInfoRow('Address', apiService.serverUrl),
                 ],
               ),
             ).animate().fadeIn(duration: 500.ms, delay: 200.ms),
@@ -151,7 +154,7 @@ class SettingsScreen extends StatelessWidget {
               _SettingItem(
                 Icons.dns_outlined,
                 'Server Address',
-                '192.168.1.100',
+                apiService.serverUrl,
               ),
               _SettingItem(
                 Icons.wifi_find_rounded,
@@ -175,7 +178,28 @@ class SettingsScreen extends StatelessWidget {
             // Logout button
             GlassContainer(
               padding: const EdgeInsets.all(14),
-              onTap: () {},
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Sign Out'),
+                    content: const Text('Are you sure you want to sign out?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  ref.read(authProvider.notifier).logout();
+                }
+              },
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

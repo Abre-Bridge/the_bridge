@@ -1,26 +1,31 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
+import '../../../core/providers/chat_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String name;
   final String status;
+  final bool isChannel;
 
   const ChatScreen({
     super.key,
     required this.chatId,
     required this.name,
     required this.status,
+    this.isChannel = false,
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -33,13 +38,24 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final messagesAsync = ref.watch(chatMessagesProvider({
+      'chatId': widget.chatId,
+      'isChannel': widget.isChannel,
+    }));
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: Column(
           children: [
             _buildAppBar(),
-            Expanded(child: _buildMessageList()),
+            Expanded(
+              child: messagesAsync.when(
+                data: (messages) => _buildMessageList(messages),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Center(child: Text('Error: $err')),
+              ),
+            ),
             _buildInputBar(),
           ],
         ),
@@ -144,19 +160,22 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageList() {
+  Widget _buildMessageList(List<dynamic> messages) {
+    final me = ref.read(authProvider).user;
+    
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       reverse: true,
-      itemCount: _mockMessages.length,
+      itemCount: messages.length,
       itemBuilder: (context, index) {
-        final msg = _mockMessages[_mockMessages.length - 1 - index];
-        final isMe = msg['isMe'] as bool;
-        final showAvatar =
-            !isMe &&
-            (index == _mockMessages.length - 1 ||
-                _mockMessages[_mockMessages.length - index]['isMe'] == true);
+        final msg = messages[index];
+        final isMe = msg['sender_id'] == me?['id'] || msg['isMe'] == true;
+        
+        bool showAvatar = !isMe;
+        if (index < messages.length - 1 && messages[index+1]['sender_id'] == msg['sender_id']) {
+          showAvatar = false;
+        }
 
         return _buildMessageBubble(msg, isMe, showAvatar, index);
       },
@@ -218,7 +237,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    msg['text'] as String,
+                    msg['content'] as String,
                     style: TextStyle(
                       color: isMe ? Colors.white : AppTheme.textPrimary,
                       fontSize: 14.5,
@@ -230,7 +249,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        msg['time'] as String,
+                        msg['created_at'] != null 
+                            ? DateTime.parse(msg['created_at']).toLocal().toString().substring(11, 16)
+                            : '',
                         style: TextStyle(
                           color: isMe
                               ? Colors.white.withValues(alpha: 0.6)
@@ -277,7 +298,6 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  // Attachment button
                   Container(
                     decoration: BoxDecoration(
                       color: AppTheme.glassWhite,
@@ -295,8 +315,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // Message input
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -346,8 +364,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // Send button
                   Container(
                     decoration: BoxDecoration(
                       gradient: AppTheme.primaryGradient,
@@ -363,6 +379,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: IconButton(
                       onPressed: () {
                         if (_messageController.text.isNotEmpty) {
+                          ref.read(chatMessagesProvider({
+                            'chatId': widget.chatId,
+                            'isChannel': widget.isChannel,
+                          }).notifier).sendMessage(_messageController.text);
                           _messageController.clear();
                         }
                       },
@@ -383,53 +403,3 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 }
-
-// Mock messages for demo
-final _mockMessages = [
-  {
-    'text': 'Hey! How\'s the LAN deployment going?',
-    'time': '2:30 PM',
-    'isMe': false,
-  },
-  {
-    'text':
-        'Going great! The mDNS discovery is working perfectly across VLANs.',
-    'time': '2:31 PM',
-    'isMe': true,
-  },
-  {
-    'text': 'That\'s awesome. Did you manage to test the file transfer?',
-    'time': '2:32 PM',
-    'isMe': false,
-  },
-  {
-    'text':
-        'Yes, the chunked transfer with resume is working beautifully. P2P kicks in on the same subnet and relay handles cross-VLAN transfers. 🚀',
-    'time': '2:33 PM',
-    'isMe': true,
-  },
-  {
-    'text':
-        'Can you check the latest build? I\'ve pushed some improvements to the signaling server.',
-    'time': '2:34 PM',
-    'isMe': false,
-  },
-  {
-    'text':
-        'Sure! I\'ll pull and test it now. The WebRTC integration is the next thing I need to verify.',
-    'time': '2:35 PM',
-    'isMe': true,
-  },
-  {
-    'text':
-        'Great. Let me know if you need the TURN server logs. The credential rotation is set to 24h TTL.',
-    'time': '2:36 PM',
-    'isMe': false,
-  },
-  {
-    'text':
-        'Perfect, that should be enough for testing. The end-to-end encryption handshake is also working fine now.',
-    'time': '2:37 PM',
-    'isMe': true,
-  },
-];

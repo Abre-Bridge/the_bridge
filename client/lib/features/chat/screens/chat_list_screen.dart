@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
-import 'chat_screen.dart';
+import '../../../core/providers/chat_provider.dart';
+import './chat_screen.dart';
 
-class ChatListScreen extends StatelessWidget {
+class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final conversationsAsync = ref.watch(conversationsProvider);
+    final onlineUsersAsync = ref.watch(onlineUsersProvider);
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,27 +34,10 @@ class ChatListScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: AppTheme.online,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.online.withValues(alpha: 0.6),
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '12 online',
-                          style: TextStyle(
-                            color: AppTheme.textMuted,
-                            fontSize: 13,
-                          ),
+                        onlineUsersAsync.when(
+                          data: (users) => _buildStatusIndicator(users.length),
+                          loading: () => const SizedBox(width: 8, height: 8),
+                          error: (_, __) => _buildStatusIndicator(0),
                         ),
                       ],
                     ),
@@ -73,39 +61,46 @@ class ChatListScreen extends StatelessWidget {
           // Online users horizontal scroll
           SizedBox(
             height: 90,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _mockOnlineUsers.length,
-              itemBuilder: (context, index) {
-                final user = _mockOnlineUsers[index];
-                return Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: Column(
-                        children: [
-                          UserAvatar(
-                            displayName: user['name']!,
-                            status: 'online',
-                            size: 52,
+            child: onlineUsersAsync.when(
+              data: (users) => ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: Column(
+                            children: [
+                              UserAvatar(
+                                displayName: user['display_name'] ?? user['username'],
+                                status: 'online',
+                                size: 52,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                (user['display_name'] ?? user['username']).split(' ').first,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            user['name']!.split(' ').first,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: Duration(milliseconds: 100 * index),
-                    )
-                    .slideX(begin: 0.2);
-              },
+                        )
+                        .animate()
+                        .fadeIn(
+                          duration: 400.ms,
+                          delay: Duration(milliseconds: 100 * index),
+                        )
+                        .slideX(begin: 0.2);
+                  },
+                ),
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.red))),
             ),
           ),
 
@@ -113,17 +108,50 @@ class ChatListScreen extends StatelessWidget {
 
           // Chat list
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _mockChats.length,
-              itemBuilder: (context, index) {
-                final chat = _mockChats[index];
-                return _buildChatTile(context, chat, index);
-              },
+            child: conversationsAsync.when(
+              data: (chats) => ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: chats.length,
+                itemBuilder: (context, index) {
+                  final chat = chats[index];
+                  return _buildChatTile(context, chat, index);
+                },
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(child: Text('Error: $err')),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatusIndicator(int count) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: AppTheme.online,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.online.withValues(alpha: 0.6),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$count online',
+          style: const TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 13,
+          ),
+        ),
+      ],
     );
   }
 
@@ -132,14 +160,23 @@ class ChatListScreen extends StatelessWidget {
     Map<String, dynamic> chat,
     int index,
   ) {
+    final name = chat['display_name'] ?? chat['username'] ?? 'User';
+    final status = chat['status'] ?? 'offline';
+    final lastMessage = chat['last_message']?['content'] ?? 'No messages yet';
+    final time = chat['last_message']?['created_at'] != null 
+        ? DateTime.parse(chat['last_message']['created_at']).toLocal().toString().substring(11, 16) 
+        : '';
+    final unread = chat['unread_count'] ?? 0;
+
     return GestureDetector(
           onTap: () {
             Navigator.of(context).push(
               PageRouteBuilder(
                 pageBuilder: (_, _, _) => ChatScreen(
                   chatId: chat['id'],
-                  name: chat['name'],
-                  status: chat['status'],
+                  name: name,
+                  status: status,
+                  isChannel: false,
                 ),
                 transitionsBuilder: (_, animation, _, child) {
                   return SlideTransition(
@@ -169,8 +206,8 @@ class ChatListScreen extends StatelessWidget {
             child: Row(
               children: [
                 UserAvatar(
-                  displayName: chat['name'],
-                  status: chat['status'],
+                  displayName: name,
+                  status: status,
                   size: 50,
                 ),
                 const SizedBox(width: 14),
@@ -183,7 +220,7 @@ class ChatListScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              chat['name'],
+                              name,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -193,10 +230,10 @@ class ChatListScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            chat['time'],
+                            time,
                             style: TextStyle(
                               fontSize: 12,
-                              color: chat['unread'] > 0
+                              color: unread > 0
                                   ? AppTheme.primaryStart
                                   : AppTheme.textMuted,
                             ),
@@ -208,13 +245,13 @@ class ChatListScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              chat['lastMessage'],
+                              lastMessage,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: chat['unread'] > 0
+                                color: unread > 0
                                     ? AppTheme.textSecondary
                                     : AppTheme.textMuted,
-                                fontWeight: chat['unread'] > 0
+                                fontWeight: unread > 0
                                     ? FontWeight.w500
                                     : FontWeight.w400,
                               ),
@@ -222,7 +259,7 @@ class ChatListScreen extends StatelessWidget {
                               maxLines: 1,
                             ),
                           ),
-                          if (chat['unread'] > 0) ...[
+                          if (unread > 0) ...[
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -234,7 +271,7 @@ class ChatListScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
-                                '${chat['unread']}',
+                                '$unread',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
@@ -260,80 +297,3 @@ class ChatListScreen extends StatelessWidget {
         .slideX(begin: 0.05);
   }
 }
-
-// Mock data for demo
-final _mockOnlineUsers = [
-  {'name': 'Alice Martin', 'avatar': null},
-  {'name': 'Bob Johnson', 'avatar': null},
-  {'name': 'Claire Wu', 'avatar': null},
-  {'name': 'David Kim', 'avatar': null},
-  {'name': 'Eva Chen', 'avatar': null},
-  {'name': 'Frank Lee', 'avatar': null},
-];
-
-final _mockChats = [
-  {
-    'id': '1',
-    'name': 'Alice Martin',
-    'lastMessage': 'Hey, can you check the latest build?',
-    'time': '2:34 PM',
-    'unread': 3,
-    'status': 'online',
-  },
-  {
-    'id': '2',
-    'name': 'Bob Johnson',
-    'lastMessage': 'The deployment is ready for review 🚀',
-    'time': '1:12 PM',
-    'unread': 1,
-    'status': 'online',
-  },
-  {
-    'id': '3',
-    'name': 'Engineering Team',
-    'lastMessage': 'Claire: Updated the API docs',
-    'time': '12:45 PM',
-    'unread': 0,
-    'status': 'online',
-  },
-  {
-    'id': '4',
-    'name': 'David Kim',
-    'lastMessage': 'Let me know when the meeting starts',
-    'time': '11:30 AM',
-    'unread': 0,
-    'status': 'away',
-  },
-  {
-    'id': '5',
-    'name': 'Product Design',
-    'lastMessage': 'Eva: New mockups are in the channel',
-    'time': '10:15 AM',
-    'unread': 5,
-    'status': 'online',
-  },
-  {
-    'id': '6',
-    'name': 'Frank Lee',
-    'lastMessage': 'Thanks for the code review!',
-    'time': 'Yesterday',
-    'unread': 0,
-    'status': 'offline',
-  },
-  {
-    'id': '7',
-    'name': 'Security Team',
-    'lastMessage': 'Audit report is complete',
-    'time': 'Yesterday',
-    'unread': 0,
-    'status': 'online',
-  },
-  {
-    'id': '8',
-    'name': 'Grace Park',
-    'lastMessage': 'See you at the sprint planning',
-    'time': 'Mon',
-    'unread': 0,
-    'status': 'busy',
-  },
-];

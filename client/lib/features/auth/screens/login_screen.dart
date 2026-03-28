@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isRegister = false;
   final _displayNameController = TextEditingController();
@@ -33,21 +34,45 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
 
-    // Simulate auth — in production this calls the API service
-    await Future.delayed(const Duration(seconds: 2));
+    if (_serverUrl != null && _serverUrl!.isNotEmpty) {
+      ref.read(apiServiceProvider).setServerUrl(_serverUrl!);
+    }
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      // Navigate to home
-      Navigator.of(context).pushReplacementNamed('/home');
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    
+    final authNotifier = ref.read(authProvider.notifier);
+    bool success;
+
+    if (_isRegister) {
+      success = await authNotifier.register(
+        _usernameController.text,
+        _displayNameController.text,
+        _passwordController.text,
+        email: _emailController.text.isNotEmpty ? _emailController.text : null,
+      );
+    } else {
+      success = await authNotifier.login(
+        _usernameController.text,
+        _passwordController.text,
+      );
+    }
+
+    if (!success && mounted) {
+      final errorMsg = ref.read(authProvider).error ?? 'Authentication failed';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: AppTheme.busy,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final isLoading = ref.watch(authProvider).isLoading;
 
     return Scaffold(
       body: Container(
@@ -79,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen>
                       const SizedBox(height: 48),
 
                       // Login Form
-                      _buildForm()
+                      _buildForm(isLoading)
                           .animate()
                           .fadeIn(duration: 800.ms, delay: 200.ms)
                           .slideY(
@@ -156,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildForm() {
+  Widget _buildForm(bool isLoading) {
     return GlassContainer(
       padding: const EdgeInsets.all(24),
       child: Form(
@@ -224,8 +249,8 @@ class _LoginScreenState extends State<LoginScreen>
             // Submit button
             GradientButton(
               text: _isRegister ? 'Create Account' : 'Sign In',
-              isLoading: _isLoading,
-              onPressed: _isLoading ? null : _handleSubmit,
+              isLoading: isLoading,
+              onPressed: isLoading ? null : _handleSubmit,
               icon: _isRegister
                   ? Icons.person_add_rounded
                   : Icons.login_rounded,
