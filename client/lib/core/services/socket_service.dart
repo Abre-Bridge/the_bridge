@@ -163,15 +163,15 @@ class SocketService {
 
   void startTyping({String? channelId, String? receiverId}) {
     _messagingSocket?.emit('typing:start', {
-      'channelId': ?channelId,
-      'receiverId': ?receiverId,
+      if (channelId != null) 'channelId': channelId,
+      if (receiverId != null) 'receiverId': receiverId,
     });
   }
 
   void stopTyping({String? channelId, String? receiverId}) {
     _messagingSocket?.emit('typing:stop', {
-      'channelId': channelId,
-      'receiverId': receiverId,
+      if (channelId != null) 'channelId': channelId,
+      if (receiverId != null) 'receiverId': receiverId,
     });
   }
 

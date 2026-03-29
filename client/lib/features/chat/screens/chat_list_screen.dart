@@ -113,25 +113,39 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   itemCount: users.length,
                   itemBuilder: (context, index) {
                     final user = users[index];
-                    return Padding(
-                          padding: const EdgeInsets.only(right: 16),
-                          child: Column(
-                            children: [
-                              UserAvatar(
-                                displayName: user['display_name'] ?? user['username'],
-                                status: 'online',
-                                size: 52,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                (user['display_name'] ?? user['username']).split(' ').first,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.textSecondary,
+                    return GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  chatId: user['id'],
+                                  name: user['display_name'] ?? user['username'],
+                                  status: 'online',
+                                  isChannel: false,
                                 ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
+                          child: Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: Column(
+                                  children: [
+                                    UserAvatar(
+                                      displayName: user['display_name'] ?? user['username'],
+                                      status: 'online',
+                                      size: 52,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      (user['display_name'] ?? user['username']).split(' ').first,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                         )
                         .animate()
                         .fadeIn(

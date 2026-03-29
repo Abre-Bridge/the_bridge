@@ -7,6 +7,7 @@ import '../../../core/widgets/glass_widgets.dart';
 import '../../../core/providers/chat_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/file_provider.dart';
+import '../../../core/providers/meeting_provider.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -132,9 +133,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ],
                     ),
                   ),
-                  _buildAppBarAction(Icons.videocam_rounded),
-                  _buildAppBarAction(Icons.call_rounded),
-                  _buildAppBarAction(Icons.more_vert_rounded),
+                  _buildAppBarAction(Icons.videocam_rounded, () {
+                    final roomId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+                    ref.read(meetingStateProvider.notifier).joinMeeting(roomId);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Starting video call with ${widget.name}...')),
+                    );
+                  }),
+                  _buildAppBarAction(Icons.call_rounded, () {
+                    final roomId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+                    ref.read(meetingStateProvider.notifier).joinMeeting(roomId);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Starting audio call with ${widget.name}...')),
+                    );
+                  }),
+                  _buildAppBarAction(Icons.more_vert_rounded, () {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('More options coming soon!')),
+                    );
+                  }),
                 ],
               ),
             ),
@@ -144,11 +161,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildAppBarAction(IconData icon) {
+  Widget _buildAppBarAction(IconData icon, VoidCallback onTap) {
     return Container(
       margin: const EdgeInsets.only(left: 4),
       child: IconButton(
-        onPressed: () {},
+        onPressed: onTap,
         icon: Icon(icon, color: AppTheme.textSecondary, size: 22),
         style: IconButton.styleFrom(
           backgroundColor: AppTheme.glassWhite,
@@ -305,7 +322,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
-                      onPressed: () => ref.read(fileProvider.notifier).sendFile(widget.chatId),
+                      onPressed: () {
+                        ref.read(fileProvider.notifier).sendFile(widget.chatId);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Selecting file to send...')),
+                        );
+                      },
                       icon: const Icon(
                         Icons.add_rounded,
                         color: AppTheme.primaryStart,
@@ -352,7 +374,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Emoji picker coming soon!')),
+                              );
+                            },
                             icon: const Icon(
                               Icons.emoji_emotions_outlined,
                               color: AppTheme.textMuted,
