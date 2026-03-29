@@ -6,11 +6,18 @@ import '../../../core/widgets/glass_widgets.dart';
 import '../../../core/providers/chat_provider.dart';
 import './chat_screen.dart';
 
-class ChatListScreen extends ConsumerWidget {
+class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatListScreen> createState() => _ChatListScreenState();
+}
+
+class _ChatListScreenState extends ConsumerState<ChatListScreen> {
+  String _searchQuery = '';
+
+  @override
+  Widget build(BuildContext context) {
     final conversationsAsync = ref.watch(conversationsProvider);
     final onlineUsersAsync = ref.watch(onlineUsersProvider);
 
@@ -43,18 +50,54 @@ class ChatListScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                GlassContainer(
-                  padding: const EdgeInsets.all(10),
-                  borderRadius: 14,
-                  child: const Icon(
-                    Icons.search_rounded,
-                    color: AppTheme.textSecondary,
-                    size: 22,
-                  ),
-                ),
               ],
             ),
           ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1),
+
+          const SizedBox(height: 16),
+
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GlassContainer(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              borderRadius: 14,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.textMuted,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val.toLowerCase();
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        hintText: 'Search messages...',
+                        hintStyle: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
 
           const SizedBox(height: 16),
 
@@ -109,14 +152,21 @@ class ChatListScreen extends ConsumerWidget {
           // Chat list
           Expanded(
             child: conversationsAsync.when(
-              data: (chats) => ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: chats.length,
-                itemBuilder: (context, index) {
-                  final chat = chats[index];
-                  return _buildChatTile(context, chat, index);
-                },
-              ),
+              data: (chats) {
+                final filteredChats = chats.where((chat) {
+                  final name = (chat['display_name'] ?? chat['username'] ?? 'User').toLowerCase();
+                  return name.contains(_searchQuery);
+                }).toList();
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: filteredChats.length,
+                  itemBuilder: (context, index) {
+                    final chat = filteredChats[index];
+                    return _buildChatTile(context, chat, index);
+                  },
+                );
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => Center(child: Text('Error: $err')),
             ),

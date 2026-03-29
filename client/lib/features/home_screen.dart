@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
+import '../core/providers/chat_provider.dart';
 import 'chat/screens/chat_list_screen.dart';
 import 'channels/screens/channels_screen.dart';
 import 'meetings/screens/meetings_screen.dart';
@@ -86,6 +87,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   }
 
   Widget _buildBottomNav() {
+    final conversationsAsync = ref.watch(conversationsProvider);
+    int unreadCount = 0;
+    if (conversationsAsync is AsyncData<List<dynamic>>) {
+      for (final chat in conversationsAsync.value) {
+        unreadCount += (chat['unread_count'] ?? 0) as int;
+      }
+    }
+
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -106,7 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     0,
                     Icons.chat_bubble_rounded,
                     'Chats',
-                    badge: 3,
+                    badge: unreadCount,
                   ),
                   _buildNavItem(1, Icons.tag_rounded, 'Channels'),
                   _buildNavItem(2, Icons.videocam_rounded, 'Meetings'),
@@ -253,7 +262,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   label: 'New Message',
                   subtitle: 'Start a direct conversation',
                   color: AppTheme.primaryStart,
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentIndex = 3);
+                  },
                 ),
                 const SizedBox(height: 12),
                 _buildActionTile(
@@ -261,7 +273,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   label: 'New Channel',
                   subtitle: 'Create a group channel',
                   color: AppTheme.accentCyan,
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentIndex = 1);
+                  },
                 ),
                 const SizedBox(height: 12),
                 _buildActionTile(
@@ -269,7 +284,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   label: 'Start Meeting',
                   subtitle: 'Create a video meeting room',
                   color: AppTheme.online,
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentIndex = 2);
+                  },
                 ),
                 const SizedBox(height: 12),
                 _buildActionTile(
@@ -277,7 +295,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   label: 'Share File',
                   subtitle: 'Send a file to someone',
                   color: AppTheme.away,
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentIndex = 3);
+                  },
                 ),
                 const SizedBox(height: 16),
               ],

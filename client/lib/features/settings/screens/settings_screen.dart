@@ -138,7 +138,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // Settings groups
-            _buildSettingsGroup('Account', [
+            _buildSettingsGroup(context, 'Account', [
               _SettingItem(Icons.person_outline_rounded, 'Profile', null),
               _SettingItem(Icons.key_rounded, 'Security & Privacy', null),
               _SettingItem(
@@ -150,7 +150,7 @@ class SettingsScreen extends ConsumerWidget {
 
             const SizedBox(height: 16),
 
-            _buildSettingsGroup('Network', [
+            _buildSettingsGroup(context, 'Network', [
               _SettingItem(
                 Icons.dns_outlined,
                 'Server Address',
@@ -166,7 +166,7 @@ class SettingsScreen extends ConsumerWidget {
 
             const SizedBox(height: 16),
 
-            _buildSettingsGroup('Preferences', [
+            _buildSettingsGroup(context, 'Preferences', [
               _SettingItem(Icons.notifications_outlined, 'Notifications', null),
               _SettingItem(Icons.dark_mode_outlined, 'Appearance', 'Dark'),
               _SettingItem(Icons.language_rounded, 'Language', 'English'),
@@ -261,6 +261,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Widget _buildSettingsGroup(
+    BuildContext context,
     String title,
     List<_SettingItem> items,
     int delayMs,
@@ -282,7 +283,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          ...items.map((item) => _buildSettingTile(item)),
+          ...items.map((item) => _buildSettingTile(context, item)),
         ],
       ),
     ).animate().fadeIn(
@@ -291,7 +292,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSettingTile(_SettingItem item) {
+  Widget _buildSettingTile(BuildContext context, _SettingItem item) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: ListTile(
@@ -318,7 +319,11 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        onTap: () {},
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${item.label} settings coming soon!')),
+          );
+        },
       ),
     );
   }

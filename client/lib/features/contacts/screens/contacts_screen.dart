@@ -6,11 +6,20 @@ import '../../../core/widgets/glass_widgets.dart';
 import '../../../core/providers/chat_provider.dart';
 import '../../chat/screens/chat_screen.dart';
 
-class ContactsScreen extends ConsumerWidget {
+import '../../../core/providers/meeting_provider.dart';
+
+class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
+}
+
+class _ContactsScreenState extends ConsumerState<ContactsScreen> {
+  String _searchQuery = '';
+
+  @override
+  Widget build(BuildContext context) {
     final onlineUsersAsync = ref.watch(onlineUsersProvider);
 
     return SafeArea(
@@ -47,7 +56,9 @@ class ContactsScreen extends ConsumerWidget {
                         fontSize: 14,
                       ),
                       onChanged: (val) {
-                        // Implement live search if needed
+                        setState(() {
+                          _searchQuery = val.toLowerCase();
+                        });
                       },
                       decoration: InputDecoration(
                         hintText: 'Search contacts...',
@@ -72,14 +83,21 @@ class ContactsScreen extends ConsumerWidget {
           // Online section
           Expanded(
             child: onlineUsersAsync.when(
-              data: (users) => ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: users.length,
-                itemBuilder: (context, index) {
-                  final user = users[index];
-                  return _buildContactTile(context, user, index, true);
-                },
-              ),
+              data: (users) {
+                final filteredUsers = users.where((u) {
+                  final name = (u['display_name'] ?? u['username'] ?? 'User').toString().toLowerCase();
+                  return name.contains(_searchQuery);
+                }).toList();
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: filteredUsers.length,
+                  itemBuilder: (context, index) {
+                    final user = filteredUsers[index];
+                    return _buildContactTile(context, user, index, true);
+                  },
+                );
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => Center(child: Text('Error: $err')),
             ),
@@ -149,7 +167,12 @@ class ContactsScreen extends ConsumerWidget {
               }),
               const SizedBox(width: 4),
               _actionButton(context, Icons.videocam_outlined, () {
-                // Video call logic
+                final roomId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+                ref.read(meetingStateProvider.notifier).joinMeeting(roomId);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Calling $name...')),
+                );
+                // Also optionally navigate to the Meetings tab if it was a global wrapper
               }),
             ],
           ),
