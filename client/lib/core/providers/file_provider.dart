@@ -3,10 +3,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 import '../services/socket_service.dart';
+import '../services/api_service.dart';
 import 'auth_provider.dart';
 
 final fileProvider = StateNotifierProvider<FileNotifier, FileState>((ref) {
-  return FileNotifier(ref.read(socketServiceProvider));
+  return FileNotifier(ref);
 });
 
 class FileState {
@@ -24,10 +25,11 @@ class FileState {
 }
 
 class FileNotifier extends StateNotifier<FileState> {
+  final Ref ref;
   final SocketService _socketService;
   static const int _chunkSize = 64 * 1024; // 64KB
 
-  FileNotifier(this._socketService) : super(FileState()) {
+  FileNotifier(this.ref) : _socketService = ref.read(socketServiceProvider), super(FileState()) {
     _socketService.connectFileTransfer();
     _setupListeners();
   }
@@ -58,32 +60,60 @@ class FileNotifier extends StateNotifier<FileState> {
       final result = await FilePicker.platform.pickFiles();
       if (result == null || result.files.single.path == null) return;
 
-      final file = File(result.files.single.path!);
+      final filePath = result.files.single.path!;
       final fileName = result.files.single.name;
-      final fileSize = await file.length();
-      final fileType = result.files.single.extension ?? 'bin';
+      final fileExtension = result.files.single.extension ?? 'bin';
+      final contentType = _getContentType(fileExtension);
 
-      // Compute simple hash for integrity
-      final bytes = await file.readAsBytes();
-      final hash = sha256.convert(bytes).toString();
+      // Show upload progress
+      state = state.copyWith(isUploading: true);
 
-      _socketService.requestFileTransfer(
-        receiverId: receiverId,
-        fileName: fileName,
-        fileSize: fileSize,
-        fileType: fileType,
-        fileHash: hash,
-        onResponse: (response) {
-          if (response['success'] == true) {
-            final transferId = response['transfer']['id'];
-            _transferFileChunks(file, transferId);
-          } else {
-            state = state.copyWith(error: response['error']);
-          }
-        },
+      final apiService = ref.read(apiServiceProvider);
+      final uploadResult = await apiService.uploadFile(
+        filePath,
+        fileName,
+        contentType,
       );
+
+      // Send message with file info
+      final chatProvider = ref.read(chatMessagesProvider({
+        'chatId': receiverId,
+        'isChannel': false,
+      }).notifier);
+
+      chatProvider.sendMessage('', messageType: 'file', fileInfo: {
+        'fileId': uploadResult['file']['id'],
+        'fileName': fileName,
+        'fileSize': uploadResult['file']['size'],
+        'fileType': uploadResult['file']['type'],
+        'fileUrl': uploadResult['file']['url'],
+      });
+
+      state = state.copyWith(isUploading: false);
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: e.toString(), isUploading: false);
+    }
+  }
+
+  String _getContentType(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      default:
+        return 'application/octet-stream';
     }
   }
 

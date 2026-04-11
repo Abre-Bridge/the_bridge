@@ -1,12 +1,31 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth.js';
+import multer from 'multer';
+import { Client as MinioClient } from 'minio';
+import crypto from 'crypto';
 import discoveryService from '../services/discovery/discoveryService.js';
 import signalingService from '../services/signaling/signalingService.js';
 import fileTransferService from '../services/fileTransfer/fileTransferService.js';
 import messagingService from '../services/messaging/messagingService.js';
+import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
 const router = Router();
+
+// Initialize MinIO client
+const minioClient = new MinioClient({
+    endPoint: config.minio.endPoint,
+    port: config.minio.port,
+    useSSL: config.minio.useSSL,
+    accessKey: config.minio.accessKey,
+    secretKey: config.minio.secretKey,
+});
+
+// Configure multer for memory storage
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+});
 
 // === DISCOVERY ROUTES ===
 
@@ -48,6 +67,33 @@ router.post('/discovery/heartbeat', authenticateToken, (req, res) => {
 
 // === MEETING ROUTES ===
 
+// POST /api/meetings — create a new meeting
+router.post('/meetings', authenticateToken, (req, res) => {
+    try {
+        const { title, maxParticipants } = req.body;
+        const roomId = signalingService._generateRoomId();
+        const room = {
+            id: roomId,
+            title: title || 'Meeting',
+            host: req.user.userId,
+            participants: new Map(),
+            createdAt: Date.now(),
+            maxParticipants: maxParticipants || 50,
+        };
+        signalingService.rooms.set(roomId, room);
+        logger.info(`Room created via API: ${roomId} by ${req.user.username}`);
+        res.json({
+            roomId,
+            title: room.title,
+            host: room.host,
+            createdAt: room.createdAt,
+        });
+    } catch (error) {
+        logger.error('Create meeting error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // GET /api/meetings — get active meetings
 router.get('/meetings', authenticateToken, (req, res) => {
     const rooms = signalingService.getActiveRooms();
@@ -62,6 +108,46 @@ router.get('/meetings/:roomId', authenticateToken, (req, res) => {
 });
 
 // === FILE TRANSFER ROUTES ===
+
+// POST /api/files/upload — upload file to MinIO
+router.post('/files/upload', authenticateToken, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file provided' });
+        }
+
+        const file = req.file;
+        const fileId = crypto.randomUUID();
+        const fileName = `${fileId}-${file.originalname}`;
+
+        // For testing: store file locally instead of MinIO
+        const fs = await import('fs');
+        const path = await import('path');
+        const uploadDir = path.join(process.cwd(), 'uploads');
+        
+        // Ensure upload directory exists
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, file.buffer);
+
+        // Generate local URL
+        const fileUrl = `http://localhost:3001/uploads/${fileName}`;
+
+        res.json({
+            fileId,
+            fileName: file.originalname,
+            fileUrl,
+            fileSize: file.size,
+            fileType: file.mimetype,
+        });
+    } catch (error) {
+        logger.error('File upload error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // GET /api/files/transfers — get active file transfers
 router.get('/files/transfers', authenticateToken, (req, res) => {

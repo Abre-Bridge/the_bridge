@@ -18,10 +18,17 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
   @override
   Widget build(BuildContext context) {
     final meetingState = ref.watch(meetingStateProvider);
+    final activeMeetings = ref.watch(activeMeetingsProvider);
 
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(activeMeetingsProvider.notifier).refresh();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           Padding(
@@ -134,20 +141,102 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
 
             const SizedBox(height: 12),
 
-            // Active meeting card placeholder
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GlassContainer(
-                padding: const EdgeInsets.all(20),
-                borderRadius: 20,
-                child: const Center(
-                  child: Text(
-                    'No active meetings to join.',
-                    style: TextStyle(color: AppTheme.textMuted),
+            // Active meeting cards
+            if (activeMeetings.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GlassContainer(
+                  padding: const EdgeInsets.all(20),
+                  borderRadius: 20,
+                  child: const Center(
+                    child: Text(
+                      'No active meetings to join.',
+                      style: TextStyle(color: AppTheme.textMuted),
+                    ),
                   ),
                 ),
-              ),
-            ).animate().fadeIn(duration: 500.ms, delay: 300.ms).slideY(begin: 0.1),
+              ).animate().fadeIn(duration: 500.ms, delay: 300.ms).slideY(begin: 0.1)
+            else
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: activeMeetings.length,
+                  itemBuilder: (context, index) {
+                    final meeting = activeMeetings[index];
+                    return Container(
+                      width: 280,
+                      margin: const EdgeInsets.only(right: 12),
+                      child: GlassContainer(
+                        padding: const EdgeInsets.all(16),
+                        borderRadius: 16,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.success,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    meeting['title'] ?? 'Meeting',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Room ID: ${meeting['id']}',
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${meeting['participantCount']} participants',
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const Spacer(),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => ref.read(meetingStateProvider.notifier).joinMeeting(meeting['id']),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryStart,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text('Join Meeting', style: TextStyle(fontSize: 12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ).animate().fadeIn(duration: 500.ms, delay: 300.ms).slideY(begin: 0.1),
 
             const SizedBox(height: 24),
 
@@ -184,6 +273,8 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
             ),
           ],
         ],
+      ),
+        ),
       ),
     );
   }
@@ -240,6 +331,43 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
             ],
           ),
         ),
+        // Meeting controls
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.darkCard.withValues(alpha: 0.9),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildControlButton(
+                icon: state.isAudioOn ? Icons.mic : Icons.mic_off,
+                label: state.isAudioOn ? 'Mute' : 'Unmute',
+                color: state.isAudioOn ? AppTheme.success : AppTheme.error,
+                onPressed: () {
+                  ref.read(meetingStateProvider.notifier).toggleAudio();
+                },
+              ),
+              _buildControlButton(
+                icon: state.isVideoOn ? Icons.videocam : Icons.videocam_off,
+                label: state.isVideoOn ? 'Stop Video' : 'Start Video',
+                color: state.isVideoOn ? AppTheme.success : AppTheme.error,
+                onPressed: () {
+                  ref.read(meetingStateProvider.notifier).toggleVideo();
+                },
+              ),
+              _buildControlButton(
+                icon: Icons.call_end,
+                label: 'Leave',
+                color: AppTheme.error,
+                onPressed: () {
+                  ref.read(meetingStateProvider.notifier).leaveMeeting();
+                },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -272,60 +400,39 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
     );
   }
 
-  Widget _buildQuickAction({
+  Widget _buildControlButton({
     required IconData icon,
     required String label,
-    required List<Color> gradient,
-    required VoidCallback onTap,
+    required Color color,
+    required VoidCallback onPressed,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              gradient[0].withValues(alpha: 0.15),
-              gradient[1].withValues(alpha: 0.05),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: gradient[0].withValues(alpha: 0.2)),
+          child: IconButton(
+            onPressed: onPressed,
+            icon: Icon(icon, color: color, size: 28),
+          ),
         ),
-        child: Column(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: gradient),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: gradient[0].withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 24),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
-                height: 1.3,
-              ),
-            ),
-          ],
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
         ),
-      ),
+      ],
     );
   }
 

@@ -5,9 +5,9 @@ const config = {
 
     server: {
         host: process.env.SERVER_HOST || '0.0.0.0',
-        apiPort: parseInt(process.env.API_PORT || '3000'),
-        wsPort: parseInt(process.env.WS_PORT || '3001'),
-        signalingPort: parseInt(process.env.SIGNALING_PORT || '3002'),
+        apiPort: parseInt(process.env.API_PORT || '3001'),
+        wsPort: parseInt(process.env.API_PORT || '3001'),
+        signalingPort: parseInt(process.env.API_PORT || '3001'),
     },
 
     postgres: {

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_provider.dart';
+import '../services/api_service.dart';
 
 // Provides the list of online users
 final onlineUsersProvider = FutureProvider<List<dynamic>>((ref) async {
@@ -70,12 +71,47 @@ class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
     });
   }
 
-  void sendMessage(String content) {
+  void sendMessage(String content, {String messageType = 'text', Map<String, dynamic>? fileInfo}) {
     final socketService = ref.read(socketServiceProvider);
+    final apiService = ref.read(apiServiceProvider);
+    
+    // Send via API first for persistence
+    try {
+      if (isChannel) {
+        apiService.sendChannelMessage(
+          channelId: chatId,
+          content: content,
+          messageType: messageType,
+          fileInfo: fileInfo,
+        );
+      } else {
+        apiService.sendDirectMessage(
+          receiverId: chatId,
+          content: content,
+          messageType: messageType,
+          fileInfo: fileInfo,
+        );
+      }
+    } catch (e) {
+      // If API fails, still try socket for real-time delivery
+      print('API send failed: $e');
+    }
+
+    // Send via socket for real-time delivery
     if (isChannel) {
-      socketService.sendMessage(channelId: chatId, content: content);
+      socketService.sendMessage(
+        channelId: chatId, 
+        content: content,
+        messageType: messageType,
+        fileInfo: fileInfo,
+      );
     } else {
-      socketService.sendDirectMessage(receiverId: chatId, content: content);
+      socketService.sendDirectMessage(
+        receiverId: chatId, 
+        content: content,
+        messageType: messageType,
+        fileInfo: fileInfo,
+      );
     }
     
     // Optimistic update
@@ -85,6 +121,8 @@ class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
       'content': content,
       'sender_id': me?['id'],
       'created_at': DateTime.now().toIso8601String(),
+      'message_type': messageType,
+      'file_info': fileInfo,
       'isMe': true,
     };
     state = state.whenData((msgs) => [optimisticMsg, ...msgs]);

@@ -70,4 +70,22 @@ router.get('/unread', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /api/messages/dm — send direct message
+router.post('/dm', authenticateToken, async (req, res) => {
+    try {
+        const { receiverId, content, encryptedContent, messageType = 'text', fileInfo } = req.body;
+        const message = await messagingService.sendDirectMessage(req.user.userId, {
+            receiverId,
+            content,
+            encryptedContent,
+            messageType,
+            fileInfo
+        });
+        res.json(message);
+    } catch (error) {
+        logger.error('Send DM error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

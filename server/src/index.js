@@ -36,6 +36,9 @@ async function startServer() {
     app.use(cookieParser());
     app.use(morgan('short', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
+    // Static file serving for uploads
+    app.use('/uploads', express.static('uploads'));
+
     // API Routes
     app.use('/api/auth', authRoutes);
     app.use('/api/channels', channelRoutes);

@@ -11,7 +11,7 @@ class SocketService {
   io.Socket? _signalingSocket;
   io.Socket? _fileSocket;
 
-  String _serverUrl = 'http://192.168.204.92:3000';
+  String _serverUrl = const String.fromEnvironment('WS_URL', defaultValue: 'http://localhost:3001');
   String? _token;
 
   // Stream controllers for events

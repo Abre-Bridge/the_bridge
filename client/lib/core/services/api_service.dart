@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// API Service for HTTP communication with TheBridge server
@@ -10,7 +11,7 @@ class ApiService {
 
   late Dio _dio;
   String? _token;
-  String _baseUrl = 'http://192.168.204.92:3000';
+  String _baseUrl = const String.fromEnvironment('API_URL', defaultValue: 'http://localhost:3001');
 
   Future<void> initialize({String? serverUrl}) async {
     if (serverUrl != null) _baseUrl = serverUrl;
@@ -179,8 +180,38 @@ class ApiService {
     return response.data;
   }
 
-  Future<Map<String, dynamic>> getUnreadCount() async {
-    final response = await _dio.get('/messages/unread');
+  Future<Map<String, dynamic>> sendDirectMessage({
+    required String receiverId,
+    required String content,
+    String? messageType,
+    Map<String, dynamic>? fileInfo,
+  }) async {
+    final response = await _dio.post(
+      '/messages/dm',
+      data: {
+        'receiverId': receiverId,
+        'content': content,
+        'messageType': messageType ?? 'text',
+        'fileInfo': fileInfo,
+      },
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> sendChannelMessage({
+    required String channelId,
+    required String content,
+    String? messageType,
+    Map<String, dynamic>? fileInfo,
+  }) async {
+    final response = await _dio.post(
+      '/channels/$channelId/messages',
+      data: {
+        'content': content,
+        'messageType': messageType ?? 'text',
+        'fileInfo': fileInfo,
+      },
+    );
     return response.data;
   }
 
@@ -209,12 +240,24 @@ class ApiService {
     return response.data;
   }
 
-  Future<bool> healthCheck() async {
-    try {
-      final response = await _dio.get('/health');
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<Map<String, dynamic>> uploadFile(
+    String filePath,
+    String fileName,
+    String contentType,
+  ) async {
+    final file = await MultipartFile.fromFile(
+      filePath,
+      filename: fileName,
+      contentType: MediaType.parse(contentType),
+    );
+
+    final formData = FormData.fromMap({
+      'file': file,
+    });
+
+    final response = await _dio.post(
+      '/files/upload',
+      data: formData,
+    );
+    return response.data;
   }
-}

@@ -2,11 +2,39 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../services/socket_service.dart';
+import '../services/api_service.dart';
 import 'auth_provider.dart';
 
 final meetingStateProvider = StateNotifierProvider<MeetingNotifier, MeetingState>((ref) {
   return MeetingNotifier(ref.read(socketServiceProvider), ref);
 });
+
+// Provider for active meetings list
+final activeMeetingsProvider = StateNotifierProvider<ActiveMeetingsNotifier, List<Map<String, dynamic>>>((ref) {
+  return ActiveMeetingsNotifier(ref.read(apiServiceProvider));
+});
+
+class ActiveMeetingsNotifier extends StateNotifier<List<Map<String, dynamic>>> {
+  final ApiService _apiService;
+  
+  ActiveMeetingsNotifier(this._apiService) : super([]) {
+    fetchActiveMeetings();
+  }
+
+  Future<void> fetchActiveMeetings() async {
+    try {
+      final meetings = await _apiService.getActiveMeetings();
+      state = List<Map<String, dynamic>>.from(meetings);
+    } catch (e) {
+      // Handle error silently for now
+      state = [];
+    }
+  }
+
+  Future<void> refresh() async {
+    await fetchActiveMeetings();
+  }
+}
 
 class MeetingState {
   final bool isJoined;
@@ -229,6 +257,24 @@ class MeetingNotifier extends StateNotifier<MeetingState> {
     newRenderers[userId]?.dispose();
     newRenderers.remove(userId);
     state = state.copyWith(remoteRenderers: newRenderers);
+  }
+
+  void toggleAudio() {
+    if (_localStream != null) {
+      final audioTrack = _localStream!.getAudioTracks().first;
+      audioTrack.enabled = !audioTrack.enabled;
+      state = state.copyWith(isAudioOn: audioTrack.enabled);
+      _socketService.signalingSocket?.emit('media:toggle_audio', {'enabled': audioTrack.enabled});
+    }
+  }
+
+  void toggleVideo() {
+    if (_localStream != null) {
+      final videoTrack = _localStream!.getVideoTracks().first;
+      videoTrack.enabled = !videoTrack.enabled;
+      state = state.copyWith(isVideoOn: videoTrack.enabled);
+      _socketService.signalingSocket?.emit('media:toggle_video', {'enabled': videoTrack.enabled});
+    }
   }
 
   Future<void> leaveMeeting() async {
