@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../services/socket_service.dart';
 import '../services/api_service.dart';
 import 'auth_provider.dart';
+import 'chat_provider.dart';
 
 final fileProvider = StateNotifierProvider<FileNotifier, FileState>((ref) {
   return FileNotifier(ref);
@@ -12,14 +13,16 @@ final fileProvider = StateNotifierProvider<FileNotifier, FileState>((ref) {
 
 class FileState {
   final Map<String, double> transferProgress; // transferId -> progress (0.0 to 1.0)
+  final bool isUploading;
   final String? error;
 
-  FileState({this.transferProgress = const {}, this.error});
+  FileState({this.transferProgress = const {}, this.isUploading = false, this.error});
 
-  FileState copyWith({Map<String, double>? transferProgress, String? error}) {
+  FileState copyWith({Map<String, double>? transferProgress, bool? isUploading, String? error}) {
     return FileState(
       transferProgress: transferProgress ?? this.transferProgress,
-      error: error,
+      isUploading: isUploading ?? this.isUploading,
+      error: error ?? this.error,
     );
   }
 }

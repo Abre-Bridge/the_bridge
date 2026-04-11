@@ -27,6 +27,8 @@ class AppTheme {
   static const Color online = Color(0xFF22C55E);
   static const Color away = Color(0xFFF59E0B);
   static const Color busy = Color(0xFFEF4444);
+  static const Color success = Color(0xFF22C55E);
+  static const Color error = Color(0xFFEF4444);
   static const Color offline = Color(0xFF6B7280);
 
   // Message bubbles
