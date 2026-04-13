@@ -152,7 +152,7 @@ class ApiService {
   }) async {
     final response = await _dio.get(
       '/channels/$channelId/messages',
-      queryParameters: {'limit': limit, 'before': ?before},
+      queryParameters: {'limit': limit, 'before': before},
     );
     return response.data;
   }
@@ -262,3 +262,4 @@ class ApiService {
     return response.data;
   }
 }
+

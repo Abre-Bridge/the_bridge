@@ -21,261 +21,261 @@ class _MeetingsScreenState extends ConsumerState<MeetingsScreen> {
     final activeMeetings = ref.watch(activeMeetingsProvider);
 
     return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(activeMeetingsProvider.notifier).refresh();
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Meetings',
-                  style: Theme.of(context).textTheme.displayMedium,
-                ),
-                if (meetingState.isJoined)
-                  IconButton(
-                    onPressed: () => ref.read(meetingStateProvider.notifier).leaveMeeting(),
-                    icon: const Icon(Icons.call_end_rounded, color: AppTheme.busy),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.busy.withValues(alpha: 0.1),
-                    ),
-                  ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 400.ms),
+      child: meetingState.isJoined
+          ? _buildMeetingRoom(meetingState)
+          : RefreshIndicator(
+              onRefresh: () async {
+                await ref.read(activeMeetingsProvider.notifier).refresh();
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 100), // Space for FAB
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Meetings',
+                            style: Theme.of(context).textTheme.displayMedium,
+                          ),
+                        ],
+                      ),
+                    ).animate().fadeIn(duration: 400.ms),
 
-          const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-          if (meetingState.isJoined)
-             Expanded(child: _buildMeetingRoom(meetingState))
-          else ...[
-            // Quick actions
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildQuickAction(
-                      icon: Icons.videocam_rounded,
-                      label: 'Start\nMeeting',
-                      gradient: [AppTheme.primaryStart, AppTheme.primaryEnd],
-                      onTap: () => _handleStartMeeting(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildQuickAction(
-                      icon: Icons.add_link_rounded,
-                      label: 'Join\nMeeting',
-                      gradient: [AppTheme.accentCyan, AppTheme.accentTeal],
-                      onTap: () => _handleJoinMeeting(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildQuickAction(
-                      icon: Icons.schedule_rounded,
-                      label: 'Schedule\nMeeting',
-                      gradient: [
-                        const Color(0xFFF59E0B),
-                        const Color(0xFFEF4444),
-                      ],
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Meeting Scheduling coming soon!')),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            )
-            .animate()
-            .fadeIn(duration: 500.ms, delay: 200.ms)
-            .slideY(begin: 0.1),
+                    // Quick actions
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildQuickAction(
+                              icon: Icons.videocam_rounded,
+                              label: 'Start\nMeeting',
+                              gradient: [AppTheme.primaryStart, AppTheme.primaryEnd],
+                              onTap: () => _handleStartMeeting(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildQuickAction(
+                              icon: Icons.add_link_rounded,
+                              label: 'Join\nMeeting',
+                              gradient: [AppTheme.accentCyan, AppTheme.accentTeal],
+                              onTap: () => _handleJoinMeeting(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildQuickAction(
+                              icon: Icons.schedule_rounded,
+                              label: 'Schedule\nMeeting',
+                              gradient: [
+                                const Color(0xFFF59E0B),
+                                const Color(0xFFEF4444),
+                              ],
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Meeting Scheduling coming soon!')),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(duration: 500.ms, delay: 200.ms)
+                        .slideY(begin: 0.1),
 
-            const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-            const SizedBox(height: 24),
-
-            // Active meetings
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: AppTheme.busy,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.busy.withValues(alpha: 0.6),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'ACTIVE NOW',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textMuted,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Active meeting cards
-            if (activeMeetings.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GlassContainer(
-                  padding: const EdgeInsets.all(20),
-                  borderRadius: 20,
-                  child: const Center(
-                    child: Text(
-                      'No active meetings to join.',
-                      style: TextStyle(color: AppTheme.textMuted),
-                    ),
-                  ),
-                ),
-              ).animate().fadeIn(duration: 500.ms, delay: 300.ms).slideY(begin: 0.1)
-            else
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: activeMeetings.length,
-                  itemBuilder: (context, index) {
-                    final meeting = activeMeetings[index];
-                    return Container(
-                      width: 280,
-                      margin: const EdgeInsets.only(right: 12),
-                      child: GlassContainer(
-                        padding: const EdgeInsets.all(16),
-                        borderRadius: 16,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: AppTheme.success,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    meeting['title'] ?? 'Meeting',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                    // Active meetings
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: AppTheme.busy,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.busy.withValues(alpha: 0.6),
+                                  blurRadius: 6,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Room ID: ${meeting['id']}',
-                              style: const TextStyle(
-                                color: AppTheme.textMuted,
-                                fontSize: 12,
-                              ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'ACTIVE NOW',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textMuted,
+                              letterSpacing: 1.2,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${meeting['participantCount']} participants',
-                              style: const TextStyle(
-                                color: AppTheme.textMuted,
-                                fontSize: 12,
-                              ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Active meeting cards
+                    if (activeMeetings.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: GlassContainer(
+                          padding: const EdgeInsets.all(20),
+                          borderRadius: 20,
+                          child: const Center(
+                            child: Text(
+                              'No active meetings to join.',
+                              style: TextStyle(color: AppTheme.textMuted),
                             ),
-                            const Spacer(),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => ref.read(meetingStateProvider.notifier).joinMeeting(meeting['id']),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryStart,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                          ),
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(duration: 500.ms, delay: 300.ms)
+                          .slideY(begin: 0.1)
+                    else
+                      SizedBox(
+                        height: 120,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: activeMeetings.length,
+                          itemBuilder: (context, index) {
+                            final meeting = activeMeetings[index];
+                            return Container(
+                              width: 280,
+                              margin: const EdgeInsets.only(right: 12),
+                              child: GlassContainer(
+                                padding: const EdgeInsets.all(16),
+                                borderRadius: 16,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: const BoxDecoration(
+                                            color: AppTheme.success,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            meeting['title'] ?? 'Meeting',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Room ID: ${meeting['id']}',
+                                      style: const TextStyle(
+                                        color: AppTheme.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${meeting['participantCount']} participants',
+                                      style: const TextStyle(
+                                        color: AppTheme.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: () => ref
+                                            .read(meetingStateProvider.notifier)
+                                            .joinMeeting(meeting['id']),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppTheme.primaryStart,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        child: const Text('Join Meeting',
+                                            style: TextStyle(fontSize: 12)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                child: const Text('Join Meeting', style: TextStyle(fontSize: 12)),
                               ),
-                            ),
-                          ],
+                            );
+                          },
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(duration: 500.ms, delay: 300.ms)
+                          .slideY(begin: 0.1),
+
+                    const SizedBox(height: 24),
+
+                    // Upcoming
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'UPCOMING',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textMuted,
+                          letterSpacing: 1.2,
                         ),
                       ),
-                    );
-                  },
-                ),
-              ).animate().fadeIn(duration: 500.ms, delay: 300.ms).slideY(begin: 0.1),
-
-            const SizedBox(height: 24),
-
-            // Upcoming
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'UPCOMING',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textMuted,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GlassContainer(
-                  padding: const EdgeInsets.all(20),
-                  borderRadius: 20,
-                  child: const Center(
-                    child: Text(
-                      'No upcoming meetings scheduled.',
-                      style: TextStyle(color: AppTheme.textMuted),
                     ),
-                  ),
+
+                    const SizedBox(height: 12),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: GlassContainer(
+                        padding: const EdgeInsets.all(20),
+                        borderRadius: 20,
+                        child: const Center(
+                          child: Text(
+                            'No upcoming meetings scheduled.',
+                            style: TextStyle(color: AppTheme.textMuted),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ],
-      ),
-        ),
-      ),
     );
   }
 

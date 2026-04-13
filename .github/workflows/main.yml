@@ -52,12 +52,26 @@ jobs:
       - name: Build debug APK
         run: flutter build apk --debug --verbose
         working-directory: client
+        continue-on-error: true
+
+      - name: Locate debug APK
+        id: find_debug
+        shell: bash
+        run: |
+          APK=$(find client/build -name "app-debug.apk" 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::Debug APK not found under client/build"
+            find client/build -name "*.apk" 2>/dev/null || true
+            exit 1
+          fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Found debug APK at: $APK"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: client/build/app/outputs/flutter-apk/app-debug.apk
+          path: ${{ steps.find_debug.outputs.path }}
           retention-days: 7
 
       # ── Release APK (unsigned) ───────────────────────────────────────────────
@@ -65,10 +79,24 @@ jobs:
       - name: Build release APK (unsigned)
         run: flutter build apk --release --no-shrink --verbose
         working-directory: client
+        continue-on-error: true
+
+      - name: Locate release APK
+        id: find_release
+        shell: bash
+        run: |
+          APK=$(find client/build -name "app-release.apk" 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::Release APK not found under client/build"
+            find client/build -name "*.apk" 2>/dev/null || true
+            exit 1
+          fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Found release APK at: $APK"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: client/build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ steps.find_release.outputs.path }}
           retention-days: 14
