@@ -33,13 +33,13 @@ jobs:
         run: flutter pub get
         working-directory: client
 
-      - name: Run build_runner (if applicable)
-        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Analyze project
+        run: flutter analyze --no-fatal-infos
         working-directory: client
         continue-on-error: true
 
-      - name: Analyze project
-        run: flutter analyze --no-fatal-infos
+      - name: List files before build
+        run: ls -R
         working-directory: client
         continue-on-error: true
 
@@ -52,13 +52,20 @@ jobs:
       - name: Build debug APK
         shell: bash
         working-directory: client
-        run: flutter build apk --debug || true
+        run: flutter build apk --debug
+
+      - name: List generated APKs
+        run: find . -name "*.apk"
+        working-directory: client
+        continue-on-error: true
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: client/build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            client/build/app/outputs/flutter-apk/*.apk
+            client/android/app/build/outputs/apk/**/*.apk
           retention-days: 7
           if-no-files-found: error
 
@@ -67,12 +74,19 @@ jobs:
       - name: Build release APK (unsigned)
         shell: bash
         working-directory: client
-        run: flutter build apk --release || true
+        run: |
+          flutter build apk --release
+          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
+            echo "Error: Release APK was not generated."
+            exit 1
+          fi
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: client/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            client/build/app/outputs/flutter-apk/*.apk
+            client/android/app/build/outputs/apk/**/*.apk
           retention-days: 14
           if-no-files-found: error

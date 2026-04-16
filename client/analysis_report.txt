@@ -1,0 +1,15 @@
+Analyzing client...                                             
+
+warning • Unused import: '../services/api_service.dart' • lib/core/providers/chat_provider.dart:3:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/core/providers/chat_provider.dart:97:7 • avoid_print
+warning • Unused import: 'package:crypto/crypto.dart' • lib/core/providers/file_provider.dart:4:8 • unused_import
+warning • Unused import: '../services/api_service.dart' • lib/core/providers/file_provider.dart:6:8 • unused_import
+warning • The declaration '_transferFileChunks' isn't referenced • lib/core/providers/file_provider.dart:123:16 • unused_element
+   info • The imported package 'http_parser' isn't a dependency of the importing package • lib/core/services/api_service.dart:3:8 • depend_on_referenced_packages
+   info • Use the null-aware marker '?' rather than a null check via an 'if' • lib/core/services/socket_service.dart:166:7 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if' • lib/core/services/socket_service.dart:167:7 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if' • lib/core/services/socket_service.dart:173:7 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if' • lib/core/services/socket_service.dart:174:7 • use_null_aware_elements
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/meetings/screens/meetings_screen.dart:333:36 • deprecated_member_use
+
+11 issues found. (ran in 7.6s)
