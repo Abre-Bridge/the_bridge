@@ -64,7 +64,6 @@ jobs:
           [ -n "${{ secrets.API_BASE_URL }}" ]      && echo "API_BASE_URL=${{ secrets.API_BASE_URL }}"           >> .env || true
           [ -n "${{ secrets.SUPABASE_URL }}" ]      && echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}"           >> .env || true
           [ -n "${{ secrets.SUPABASE_ANON_KEY }}" ] && echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env || true
-
       - name: Write google-services.json
         run: |
           if [ -n "$GSVC" ]; then
@@ -107,7 +106,6 @@ jobs:
           else
             echo "build_runner not in pubspec — skipping."
           fi
-
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
         continue-on-error: true
@@ -124,7 +122,6 @@ jobs:
             echo "Building unsigned release APK..."
             flutter build apk --release --no-shrink --verbose
           fi
-
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
