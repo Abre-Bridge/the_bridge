@@ -1,4 +1,4 @@
-package com.thebridge.thebridge_client
+package com.example.thebridge_client
 
 import io.flutter.embedding.android.FlutterActivity
 
