@@ -222,7 +222,7 @@ class SettingsScreen extends ConsumerWidget {
             // Version info
             Center(
               child: Text(
-                'TheBridge v1.0.0 — Enterprise LAN Platform',
+                'The Bridge v1.0.0 — Enterprise LAN Platform',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppTheme.textMuted.withValues(alpha: 0.5),

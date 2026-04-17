@@ -142,7 +142,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            gradient: AppTheme.primaryGradient,
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -152,14 +151,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ],
           ),
-          child: const Icon(Icons.hub_rounded, color: Colors.white, size: 40),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Image.asset(
+              'assets/images/logo_icon.png',
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
         const SizedBox(height: 20),
         ShaderMask(
           shaderCallback: (bounds) =>
               AppTheme.primaryGradient.createShader(bounds),
           child: const Text(
-            'TheBridge',
+            'The Bridge',
             style: TextStyle(
               fontSize: 36,
               fontWeight: FontWeight.w700,
@@ -366,7 +371,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Enter the TheBridge server address or leave empty for auto-discovery.',
+              'Enter the The Bridge server address or leave empty for auto-discovery.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 16),

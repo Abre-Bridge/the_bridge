@@ -36,7 +36,7 @@ class TheBridgeApp extends ConsumerWidget {
     final authState = ref.watch(authProvider);
 
     return MaterialApp(
-      title: 'TheBridge',
+      title: 'The Bridge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: authState.isLoading
