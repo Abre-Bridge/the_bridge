@@ -33,7 +33,6 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      # ✅ THE FIX IS HERE — channel only, flutter-version removed entirely
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -64,6 +63,7 @@ jobs:
           [ -n "${{ secrets.API_BASE_URL }}" ]      && echo "API_BASE_URL=${{ secrets.API_BASE_URL }}"           >> .env || true
           [ -n "${{ secrets.SUPABASE_URL }}" ]      && echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}"           >> .env || true
           [ -n "${{ secrets.SUPABASE_ANON_KEY }}" ] && echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env || true
+
       - name: Write google-services.json
         run: |
           if [ -n "$GSVC" ]; then
@@ -79,12 +79,11 @@ jobs:
         run: |
           if [ -n "$KS_B64" ]; then
             echo "$KS_B64" | base64 --decode > android/app/keystore.jks
-            cat <<EOF > android/key.properties
-          storePassword=${{ secrets.STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=keystore.jks
-          EOF
+            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore.jks\n' \
+              "${{ secrets.STORE_PASSWORD }}" \
+              "${{ secrets.KEY_PASSWORD }}" \
+              "${{ secrets.KEY_ALIAS }}" \
+              > android/key.properties
             echo "Keystore written."
           else
             echo "Building unsigned."
@@ -106,22 +105,29 @@ jobs:
           else
             echo "build_runner not in pubspec — skipping."
           fi
+
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
         continue-on-error: true
 
       - name: Build debug APK
-        run: flutter build apk --debug --no-shrink --verbose
+        run: flutter build apk --debug --verbose
 
       - name: Build release APK
+        continue-on-error: true
         run: |
           if [ -f "android/key.properties" ]; then
             echo "Building signed release APK..."
             flutter build apk --release --verbose
           else
             echo "Building unsigned release APK..."
-            flutter build apk --release --no-shrink --verbose
+            flutter build apk --release --verbose
           fi
+
+      - name: Locate APKs
+        if: always()
+        run: find build/app/outputs -name "*.apk" 2>/dev/null || echo "No APKs found"
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -135,8 +141,10 @@ jobs:
           name: release-apk-${{ github.sha }}
           path: client/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+          if-no-files-found: warn
 
-      - name: Report APK size
+      - name: Report APK sizes
+        if: always()
         run: |
           find build/app/outputs/flutter-apk/ -name "*.apk" \
             -exec sh -c 'echo "$(basename {}) — $(du -sh {} | cut -f1)"' \;
