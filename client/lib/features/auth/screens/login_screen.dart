@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_widgets.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/discovery_provider.dart';
+import '../../../core/services/discovery_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -22,6 +24,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _displayNameController = TextEditingController();
   final _emailController = TextEditingController();
   String? _serverUrl;
+  bool _isDiscovering = false;
+  List<DiscoveredServer> _discoveredServers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _startDiscovery();
+  }
+
+  Future<void> _startDiscovery() async {
+    if (mounted) setState(() => _isDiscovering = true);
+    
+    final discoveryService = ref.read(discoveryServiceProvider);
+    
+    // Listen for servers found
+    discoveryService.onServersFound.listen((servers) {
+      if (mounted) {
+        setState(() {
+          _discoveredServers = servers;
+          // If we don't have a manual URL, and we found exactly one server, use it
+          if (_serverUrl == null && servers.isNotEmpty) {
+            _serverUrl = servers.first.url;
+          }
+        });
+      }
+    });
+
+    await discoveryService.scanForServers();
+    if (mounted) setState(() => _isDiscovering = false);
+  }
 
   @override
   void dispose() {
@@ -343,15 +375,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.dns_outlined, color: AppTheme.textMuted, size: 16),
+          const SizedBox(width: 6),
+          if (_isDiscovering && (_discoveredServers.isEmpty))
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textMuted),
+            )
+          else
+            Icon(
+              _serverUrl != null ? Icons.dns_rounded : Icons.dns_outlined,
+              color: _serverUrl != null ? AppTheme.primaryStart : AppTheme.textMuted,
+              size: 16,
+            ),
           const SizedBox(width: 6),
           Text(
-            _serverUrl ?? 'Auto-discover server',
+            _serverUrl ?? (_isDiscovering ? 'Discovering servers...' : 'Auto-discover server'),
             style: TextStyle(
-              color: AppTheme.textMuted,
+              color: _serverUrl != null ? AppTheme.primaryStart : AppTheme.textMuted,
               fontSize: 13,
               decoration: TextDecoration.underline,
-              decorationColor: AppTheme.textMuted.withValues(alpha: 0.5),
+              decorationColor: (_serverUrl != null ? AppTheme.primaryStart : AppTheme.textMuted).withValues(alpha: 0.5),
             ),
           ),
         ],
@@ -379,10 +423,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               controller: controller,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
-                hintText: 'http://192.168.204.92:3000',
+                hintText: 'http://192.168.1.100:3050',
                 prefixIcon: Icon(Icons.link, size: 20),
               ),
             ),
+            if (_discoveredServers.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'DISCOVERED SERVERS',
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ..._discoveredServers.map((server) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.dns, color: AppTheme.primaryStart, size: 20),
+                title: Text(server.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                subtitle: Text(server.url, style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                onTap: () {
+                  controller.text = server.url;
+                },
+              )),
+            ],
+            if (_isDiscovering) ...[
+              const SizedBox(height: 16),
+              const Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 10),
+                    Text('Searching...', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         actions: [

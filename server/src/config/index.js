@@ -50,7 +50,7 @@ const config = {
 
     mdns: {
         serviceName: process.env.MDNS_SERVICE_NAME || 'thebridge',
-        serviceType: process.env.MDNS_SERVICE_TYPE || '_thebridge._tcp',
+        serviceType: process.env.MDNS_SERVICE_TYPE || '_thebridge._tcp.local',
     },
 
     fileTransfer: {

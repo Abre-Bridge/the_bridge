@@ -20,11 +20,19 @@ class DiscoveryService {
 
         // Respond to mDNS queries for our service
         this.mdnsServer.on('query', (query) => {
-            const isForUs = query.questions.some(
-                (q) =>
-                    q.name === `${config.mdns.serviceName}.local` ||
-                    q.name === config.mdns.serviceType
-            );
+            const isForUs = query.questions.some((q) => {
+                const name = q.name.toLowerCase();
+                const serviceName = config.mdns.serviceName.toLowerCase();
+                const serviceType = config.mdns.serviceType.toLowerCase();
+                
+                return (
+                    name === `${serviceName}.local` ||
+                    name === `${serviceName}.local.` ||
+                    name === serviceType ||
+                    name === `${serviceType}.` ||
+                    name.includes(serviceName)
+                );
+            });
 
             if (isForUs) {
                 this._respondToQuery();
@@ -55,15 +63,16 @@ class DiscoveryService {
     _advertise() {
         if (!this.mdnsServer) return;
 
+        const instanceName = `TheBridge Server.${config.mdns.serviceType}`;
         const answers = [
             {
-                name: `${config.mdns.serviceName}.local`,
-                type: 'A',
+                name: config.mdns.serviceType,
+                type: 'PTR',
                 ttl: 120,
-                data: this.serverInfo.addresses[0],
+                data: instanceName,
             },
             {
-                name: config.mdns.serviceType,
+                name: instanceName,
                 type: 'SRV',
                 data: {
                     port: config.server.apiPort,
@@ -71,7 +80,7 @@ class DiscoveryService {
                 },
             },
             {
-                name: config.mdns.serviceType,
+                name: instanceName,
                 type: 'TXT',
                 data: [
                     `api_port=${config.server.apiPort}`,

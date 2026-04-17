@@ -30,7 +30,7 @@ class DiscoveryService {
       await for (final PtrResourceRecord ptr
           in client
               .lookup<PtrResourceRecord>(
-                ResourceRecordQuery.serverPointer('_thebridge._tcp'),
+                ResourceRecordQuery.serverPointer('_thebridge._tcp.local'),
               )
               .timeout(timeout, onTimeout: (sink) => sink.close())) {
         // Resolve the service
