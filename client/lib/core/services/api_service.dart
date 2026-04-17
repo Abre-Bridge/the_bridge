@@ -22,7 +22,7 @@ class ApiService {
 
     _dio = Dio(
       BaseOptions(
-        baseUrl: '$_baseUrl/api',
+        baseUrl: '$_baseUrl/api/',
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),
         headers: {
@@ -56,7 +56,7 @@ class ApiService {
 
   void setServerUrl(String url) {
     _baseUrl = url;
-    _dio.options.baseUrl = '$url/api';
+    _dio.options.baseUrl = '$url/api/';
   }
 
   String get serverUrl => _baseUrl;
@@ -70,7 +70,7 @@ class ApiService {
     String? email,
   }) async {
     final response = await _dio.post(
-      '/auth/register',
+      'auth/register',
       data: {
         'username': username,
         'displayName': displayName,
@@ -87,7 +87,7 @@ class ApiService {
     Map<String, dynamic>? deviceInfo,
   }) async {
     final response = await _dio.post(
-      '/auth/login',
+      'auth/login',
       data: {
         'username': username,
         'password': password,
@@ -98,32 +98,32 @@ class ApiService {
   }
 
   Future<void> logout() async {
-    await _dio.post('/auth/logout');
+    await _dio.post('auth/logout');
     _token = null;
   }
 
   Future<Map<String, dynamic>> getMe() async {
-    final response = await _dio.get('/auth/me');
+    final response = await _dio.get('auth/me');
     return response.data;
   }
 
   Future<List<dynamic>> searchUsers(String query) async {
     final response = await _dio.get(
-      '/auth/users/search',
+      'auth/users/search',
       queryParameters: {'q': query},
     );
     return response.data;
   }
 
   Future<List<dynamic>> getOnlineUsers() async {
-    final response = await _dio.get('/auth/users/online');
+    final response = await _dio.get('auth/users/online');
     return response.data;
   }
 
   // ========== CHANNELS ==========
 
   Future<List<dynamic>> getChannels() async {
-    final response = await _dio.get('/channels');
+    final response = await _dio.get('channels');
     return response.data;
   }
 
@@ -134,7 +134,7 @@ class ApiService {
     List<String>? members,
   }) async {
     final response = await _dio.post(
-      '/channels',
+      'channels',
       data: {
         'name': name,
         'description': description,
@@ -151,14 +151,14 @@ class ApiService {
     String? before,
   }) async {
     final response = await _dio.get(
-      '/channels/$channelId/messages',
+      'channels/$channelId/messages',
       queryParameters: {'limit': limit, 'before': before},
     );
     return response.data;
   }
 
   Future<List<dynamic>> getChannelMembers(String channelId) async {
-    final response = await _dio.get('/channels/$channelId/members');
+    final response = await _dio.get('channels/$channelId/members');
     return response.data;
   }
 
@@ -169,14 +169,14 @@ class ApiService {
     int limit = 50,
   }) async {
     final response = await _dio.get(
-      '/messages/dm/$userId',
+      'messages/dm/$userId',
       queryParameters: {'limit': limit},
     );
     return response.data;
   }
 
   Future<List<dynamic>> getConversations() async {
-    final response = await _dio.get('/messages/conversations');
+    final response = await _dio.get('messages/conversations');
     return response.data;
   }
 
@@ -187,7 +187,7 @@ class ApiService {
     Map<String, dynamic>? fileInfo,
   }) async {
     final response = await _dio.post(
-      '/messages/dm',
+      'messages/dm',
       data: {
         'receiverId': receiverId,
         'content': content,
@@ -205,7 +205,7 @@ class ApiService {
     Map<String, dynamic>? fileInfo,
   }) async {
     final response = await _dio.post(
-      '/channels/$channelId/messages',
+      'channels/$channelId/messages',
       data: {
         'content': content,
         'messageType': messageType ?? 'text',
@@ -218,25 +218,25 @@ class ApiService {
   // ========== DISCOVERY ==========
 
   Future<Map<String, dynamic>> getServerInfo() async {
-    final response = await _dio.get('/discovery/server-info');
+    final response = await _dio.get('discovery/server-info');
     return response.data;
   }
 
   Future<void> registerDevice(Map<String, dynamic> deviceInfo) async {
-    await _dio.post('/discovery/register', data: deviceInfo);
+    await _dio.post('discovery/register', data: deviceInfo);
   }
 
   // ========== MEETINGS ==========
 
   Future<List<dynamic>> getActiveMeetings() async {
-    final response = await _dio.get('/meetings');
+    final response = await _dio.get('meetings');
     return response.data;
   }
 
   // ========== STATUS ==========
 
   Future<Map<String, dynamic>> getServerStatus() async {
-    final response = await _dio.get('/status');
+    final response = await _dio.get('status');
     return response.data;
   }
 
@@ -256,7 +256,7 @@ class ApiService {
     });
 
     final response = await _dio.post(
-      '/files/upload',
+      'files/upload',
       data: formData,
     );
     return response.data;

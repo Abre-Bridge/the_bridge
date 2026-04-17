@@ -76,7 +76,7 @@ class DiscoveryService {
 
   /// Fallback: scan common LAN addresses for TheBridge server
   Future<void> _scanCommonAddresses() async {
-    final commonPorts = [3001];
+    final commonPorts = [3050, 3001];
     final gatewayPrefixes = await _getLocalSubnetPrefixes();
 
     for (final prefix in gatewayPrefixes) {
