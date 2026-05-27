@@ -175,7 +175,7 @@ class MessagingService {
      * Send a channel message: persist to DB + broadcast to room
      */
     async sendChannelMessage(senderId, data) {
-        const { channelId, content, encryptedContent, messageType = 'text', replyTo, fileInfo } = data;
+        const { channelId, content, encryptedContent, messageType = 'text', replyTo, fileInfo, clientId } = data;
 
         let messageId = `temp_${Date.now()}`;
         let createdAt = new Date().toISOString();
@@ -215,6 +215,7 @@ class MessagingService {
             is_edited: false, is_deleted: false,
             created_at: createdAt,
             sender,
+            client_id: clientId,
         };
 
         // Broadcast to everyone in the channel
@@ -226,7 +227,7 @@ class MessagingService {
      * Send a direct message: persist to DB + deliver to sender + receiver
      */
     async sendDirectMessage(senderId, data) {
-        const { receiverId, content, encryptedContent, messageType = 'text', fileInfo } = data;
+        const { receiverId, content, encryptedContent, messageType = 'text', fileInfo, clientId } = data;
 
         let messageId = `temp_${Date.now()}`;
         let createdAt = new Date().toISOString();
@@ -264,6 +265,7 @@ class MessagingService {
             is_read: false, is_deleted: false,
             created_at: createdAt,
             sender,
+            client_id: clientId,
         };
 
         // Deliver to both receiver AND sender (multi-device support)

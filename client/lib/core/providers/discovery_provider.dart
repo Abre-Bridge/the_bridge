@@ -8,6 +8,5 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
 });
 
 final discoveredServersProvider = StreamProvider<List<DiscoveredServer>>((ref) {
-  final service = ref.watch(discoveryServiceProvider);
-  return service.onServersFound;
+  return ref.watch(discoveryServiceProvider).onServersFound;
 });

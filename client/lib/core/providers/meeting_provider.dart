@@ -1,305 +1,99 @@
-import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import '../services/socket_service.dart';
-import '../services/api_service.dart';
 import 'auth_provider.dart';
-
-final meetingStateProvider = StateNotifierProvider<MeetingNotifier, MeetingState>((ref) {
-  return MeetingNotifier(ref.read(socketServiceProvider), ref);
-});
-
-// Provider for active meetings list
-final activeMeetingsProvider = StateNotifierProvider<ActiveMeetingsNotifier, List<Map<String, dynamic>>>((ref) {
-  return ActiveMeetingsNotifier(ref.read(apiServiceProvider));
-});
-
-class ActiveMeetingsNotifier extends StateNotifier<List<Map<String, dynamic>>> {
-  final ApiService _apiService;
-  
-  ActiveMeetingsNotifier(this._apiService) : super([]) {
-    fetchActiveMeetings();
-  }
-
-  Future<void> fetchActiveMeetings() async {
-    try {
-      final meetings = await _apiService.getActiveMeetings();
-      state = List<Map<String, dynamic>>.from(meetings);
-    } catch (e) {
-      // Handle error silently for now
-      state = [];
-    }
-  }
-
-  Future<void> refresh() async {
-    await fetchActiveMeetings();
-  }
-}
 
 class MeetingState {
   final bool isJoined;
   final String? roomId;
   final RTCVideoRenderer localRenderer;
   final Map<String, RTCVideoRenderer> remoteRenderers;
-  final List<dynamic> participants;
-  final bool isAudioOn;
-  final bool isVideoOn;
-  final String? error;
 
   MeetingState({
-    this.isJoined = false,
-    this.roomId,
-    required this.localRenderer,
-    this.remoteRenderers = const {},
-    this.participants = const [],
-    this.isAudioOn = true,
-    this.isVideoOn = true,
-    this.error,
+    this.isJoined = false, 
+    this.roomId, 
+    required this.localRenderer, 
+    this.remoteRenderers = const {}
   });
 
-  MeetingState copyWith({
-    bool? isJoined,
-    String? roomId,
-    Map<String, RTCVideoRenderer>? remoteRenderers,
-    List<dynamic>? participants,
-    bool? isAudioOn,
-    bool? isVideoOn,
-    String? error,
-    bool clearError = false,
-  }) {
+  MeetingState copyWith({bool? isJoined, String? roomId, Map<String, RTCVideoRenderer>? remoteRenderers}) {
     return MeetingState(
       isJoined: isJoined ?? this.isJoined,
       roomId: roomId ?? this.roomId,
       localRenderer: localRenderer,
       remoteRenderers: remoteRenderers ?? this.remoteRenderers,
-      participants: participants ?? this.participants,
-      isAudioOn: isAudioOn ?? this.isAudioOn,
-      isVideoOn: isVideoOn ?? this.isVideoOn,
-      error: clearError ? null : (error ?? this.error),
     );
   }
 }
 
+final meetingProvider = StateNotifierProvider<MeetingNotifier, MeetingState>((ref) => MeetingNotifier(ref));
+
 class MeetingNotifier extends StateNotifier<MeetingState> {
-  final SocketService _socketService;
   final Ref _ref;
   MediaStream? _localStream;
-  final Map<String, RTCPeerConnection> _peerConnections = {};
+  final Map<String, RTCPeerConnection> _pcs = {};
 
-  MeetingNotifier(this._socketService, this._ref)
-      : super(MeetingState(localRenderer: RTCVideoRenderer())) {
-    _initRenderers();
-  }
-
-  Future<void> _initRenderers() async {
-    await state.localRenderer.initialize();
+  MeetingNotifier(this._ref) : super(MeetingState(localRenderer: RTCVideoRenderer())) {
+    state.localRenderer.initialize();
   }
 
   Future<void> joinMeeting(String roomId) async {
-    state = state.copyWith(clearError: true);
-    try {
-      _socketService.connectSignaling();
-      final signalingSocket = _socketService.signalingSocket;
+    final socket = _ref.read(socketServiceProvider);
+    
+    _localStream = await navigator.mediaDevices.getUserMedia({
+      'audio': true, 'video': {'facingMode': 'user'}
+    });
+    state.localRenderer.srcObject = _localStream;
 
-      if (signalingSocket == null) {
-        throw Exception('Signaling socket not connected');
-      }
+    socket.on('signal:offer', (data) async => _handleOffer(data));
+    socket.on('signal:answer', (data) => _handleAnswer(data));
+    socket.on('signal:ice_candidate', (data) => _handleIce(data));
 
-      // Initialize local stream
-      _localStream = await navigator.mediaDevices.getUserMedia({
-        'audio': true,
-        'video': {
-          'facingMode': 'user',
-          'width': 640,
-          'height': 480,
-        },
-      });
-
-      state.localRenderer.srcObject = _localStream;
-
-      signalingSocket.emitWithAck('room:join', {'roomId': roomId}, ack: (data) {
-        if (data['success'] == true) {
-          final iceServers = (data['iceServers'] as List)
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-          
-          state = state.copyWith(
-            isJoined: true,
-            roomId: roomId,
-            participants: data['participants'],
-          );
-
-          _setupSignalingListeners(signalingSocket, iceServers);
-          _connectToPeers(data['participants'], iceServers);
-        } else {
-          state = state.copyWith(error: data['error']);
-        }
-      });
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-    }
+    socket.emit('room:join', {'roomId': roomId});
+    state = state.copyWith(isJoined: true, roomId: roomId);
   }
 
-  void _setupSignalingListeners(dynamic socket, List<Map<String, dynamic>> iceServers) {
-    socket.on('signal:offer', (data) async {
-      final String fromUserId = data['fromUserId'];
-      final dynamic offer = data['offer'];
-      
-      final pc = await _getOrCreatePeerConnection(fromUserId, iceServers);
-      await pc.setRemoteDescription(RTCSessionDescription(offer['sdp'], offer['type']));
-      
-      final answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      
-      socket.emit('signal:answer', {
-        'targetUserId': fromUserId,
-        'answer': {'sdp': answer.sdp, 'type': answer.type},
-      });
-    });
-
-    socket.on('signal:answer', (data) async {
-      final String fromUserId = data['fromUserId'];
-      final dynamic answer = data['answer'];
-      final pc = _peerConnections[fromUserId];
-      if (pc != null) {
-        await pc.setRemoteDescription(RTCSessionDescription(answer['sdp'], answer['type']));
-      }
-    });
-
-    socket.on('signal:ice_candidate', (data) async {
-      final String fromUserId = data['fromUserId'];
-      final dynamic candidate = data['candidate'];
-      final pc = _peerConnections[fromUserId];
-      if (pc != null) {
-        await pc.addCandidate(RTCIceCandidate(
-          candidate['candidate'],
-          candidate['sdpMid'],
-          candidate['sdpMLineIndex'],
-        ));
-      }
-    });
-
-    socket.on('room:peer_joined', (data) {
-      state = state.copyWith(participants: data['participants']);
-    });
-
-    socket.on('room:peer_left', (data) {
-      final String userId = data['userId'];
-      _removePeer(userId);
-      state = state.copyWith(participants: data['participants']);
+  Future<void> _handleOffer(dynamic data) async {
+    final pc = await _createPC(data['fromUserId']);
+    await pc.setRemoteDescription(RTCSessionDescription(data['offer']['sdp'], data['offer']['type']));
+    final answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    _ref.read(socketServiceProvider).emit('signal:answer', {
+      'targetUserId': data['fromUserId'], 
+      'answer': {'sdp': answer.sdp, 'type': answer.type}
     });
   }
 
-  Future<void> _connectToPeers(List<dynamic> participants, List<Map<String, dynamic>> iceServers) async {
-    final myId = _ref.read(authProvider).user?['id'];
-    for (var p in participants) {
-      final userId = p['userId'];
-      if (userId != myId) {
-        final pc = await _getOrCreatePeerConnection(userId, iceServers);
-        final offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        _socketService.signalingSocket?.emit('signal:offer', {
-          'targetUserId': userId,
-          'offer': {'sdp': offer.sdp, 'type': offer.type},
-        });
-      }
-    }
+  void _handleAnswer(dynamic data) {
+    _pcs[data['fromUserId']]?.setRemoteDescription(RTCSessionDescription(data['answer']['sdp'], data['answer']['type']));
   }
 
-  Future<RTCPeerConnection> _getOrCreatePeerConnection(String userId, List<Map<String, dynamic>> iceServers) async {
-    if (_peerConnections.containsKey(userId)) {
-      return _peerConnections[userId]!;
-    }
+  void _handleIce(dynamic data) {
+    _pcs[data['fromUserId']]?.addCandidate(RTCIceCandidate(data['candidate']['candidate'], data['candidate']['sdpMid'], data['candidate']['sdpMLineIndex']));
+  }
 
-    final pc = await createPeerConnection({
-      'iceServers': iceServers,
-      'sdpSemantics': 'unified-plan',
+  Future<RTCPeerConnection> _createPC(String userId) async {
+    final pc = await createPeerConnection({'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]});
+    _pcs[userId] = pc;
+    _localStream?.getTracks().forEach((t) => pc.addTrack(t, _localStream!));
+    pc.onIceCandidate = (c) => _ref.read(socketServiceProvider).emit('signal:ice_candidate', {
+      'targetUserId': userId, 'candidate': {'candidate': c.candidate, 'sdpMid': c.sdpMid, 'sdpMLineIndex': c.sdpMLineIndex}
     });
-
-    _peerConnections[userId] = pc;
-
-    _localStream?.getTracks().forEach((track) {
-      pc.addTrack(track, _localStream!);
-    });
-
-    pc.onIceCandidate = (candidate) {
-      _socketService.signalingSocket?.emit('signal:ice_candidate', {
-        'targetUserId': userId,
-        'candidate': {
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex,
-        },
-      });
-    };
-
-    pc.onTrack = (event) {
-      if (event.track.kind == 'video') {
-        final remoteRenderer = RTCVideoRenderer();
-        remoteRenderer.initialize().then((_) {
-          remoteRenderer.srcObject = event.streams[0];
-          final newRenderers = Map<String, RTCVideoRenderer>.from(state.remoteRenderers);
-          newRenderers[userId] = remoteRenderer;
-          state = state.copyWith(remoteRenderers: newRenderers);
+    pc.onTrack = (e) {
+      if (e.track.kind == 'video') {
+        final render = RTCVideoRenderer();
+        render.initialize().then((_) {
+          render.srcObject = e.streams[0];
+          state = state.copyWith(remoteRenderers: {...state.remoteRenderers, userId: render});
         });
       }
     };
-
     return pc;
   }
 
-  void _removePeer(String userId) {
-    _peerConnections[userId]?.close();
-    _peerConnections.remove(userId);
-    
-    final newRenderers = Map<String, RTCVideoRenderer>.from(state.remoteRenderers);
-    newRenderers[userId]?.dispose();
-    newRenderers.remove(userId);
-    state = state.copyWith(remoteRenderers: newRenderers);
-  }
-
-  void toggleAudio() {
-    if (_localStream != null) {
-      final audioTrack = _localStream!.getAudioTracks().first;
-      audioTrack.enabled = !audioTrack.enabled;
-      state = state.copyWith(isAudioOn: audioTrack.enabled);
-      _socketService.signalingSocket?.emit('media:toggle_audio', {'enabled': audioTrack.enabled});
-    }
-  }
-
-  void toggleVideo() {
-    if (_localStream != null) {
-      final videoTrack = _localStream!.getVideoTracks().first;
-      videoTrack.enabled = !videoTrack.enabled;
-      state = state.copyWith(isVideoOn: videoTrack.enabled);
-      _socketService.signalingSocket?.emit('media:toggle_video', {'enabled': videoTrack.enabled});
-    }
-  }
-
-  Future<void> leaveMeeting() async {
-    _socketService.signalingSocket?.emit('room:leave');
-    _localStream?.getTracks().forEach((track) => track.stop());
-    _localStream = null;
-    state.localRenderer.srcObject = null;
-    
-    for (var pc in _peerConnections.values) {
-      pc.close();
-    }
-    _peerConnections.clear();
-    
-    for (var renderer in state.remoteRenderers.values) {
-      renderer.dispose();
-    }
-    
-    state = state.copyWith(isJoined: false, remoteRenderers: {}, participants: []);
-    _socketService.disconnectSignaling();
-  }
-
-  @override
-  void dispose() {
-    leaveMeeting();
-    state.localRenderer.dispose();
-    super.dispose();
+  void leave() {
+    _localStream?.getTracks().forEach((t) => t.stop());
+    _pcs.values.forEach((pc) => pc.close());
+    _pcs.clear();
+    state = state.copyWith(isJoined: false, remoteRenderers: {});
   }
 }

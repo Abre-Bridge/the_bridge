@@ -1,67 +1,58 @@
-import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// API Service for HTTP communication with TheBridge server
 class ApiService {
-  static final ApiService _instance = ApiService._internal();
-  factory ApiService() => _instance;
-  ApiService._internal();
-
   late Dio _dio;
+  String? _serverUrl;
   String? _token;
-  String _baseUrl = const String.fromEnvironment('API_URL', defaultValue: 'http://localhost:3001');
 
-  Future<void> initialize({String? serverUrl}) async {
-    if (serverUrl != null) _baseUrl = serverUrl;
+  ApiService() {
+    _dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      validateStatus: (status) => status! < 500,
+    ));
+  }
 
+  String get serverUrl => _serverUrl ?? '';
+  bool get isInitialized => _serverUrl != null;
+
+  Future<void> initialize({String? overrideUrl}) async {
     final prefs = await SharedPreferences.getInstance();
+    _serverUrl = overrideUrl ?? prefs.getString('server_url');
     _token = prefs.getString('auth_token');
-    _baseUrl = prefs.getString('server_url') ?? _baseUrl;
 
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: '$_baseUrl/api/',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      ),
-    );
+    if (_serverUrl != null) {
+      _dio.options.baseUrl = _serverUrl!;
+    }
+    
+    if (_token != null && _token!.isNotEmpty) {
+      _dio.options.headers['Authorization'] = 'Bearer $_token';
+    }
+  }
 
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (_token != null) {
-            options.headers['Authorization'] = 'Bearer $_token';
-          }
-          handler.next(options);
-        },
-        onError: (error, handler) {
-          if (error.response?.statusCode == 401) {
-            // Token expired — could trigger re-auth flow
-          }
-          handler.next(error);
-        },
-      ),
-    );
+  void setServerUrl(String url) async {
+    _serverUrl = url;
+    _dio.options.baseUrl = url;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('server_url', url);
   }
 
   void setToken(String token) {
     _token = token;
+    _dio.options.headers['Authorization'] = 'Bearer $token';
   }
 
-  void setServerUrl(String url) {
-    _baseUrl = url;
-    _dio.options.baseUrl = '$url/api/';
+  // --- Auth ---
+
+  Future<Map<String, dynamic>> login({required String username, required String password}) async {
+    final response = await _dio.post('/api/auth/login', data: {
+      'username': username,
+      'password': password,
+    });
+    if (response.statusCode == 200) return response.data;
+    throw Exception(response.data['error'] ?? 'Login failed');
   }
-
-  String get serverUrl => _baseUrl;
-
-  // ========== AUTH ==========
 
   Future<Map<String, dynamic>> register({
     required String username,
@@ -69,197 +60,70 @@ class ApiService {
     required String password,
     String? email,
   }) async {
-    final response = await _dio.post(
-      'auth/register',
-      data: {
-        'username': username,
-        'displayName': displayName,
-        'password': password,
-        'email': email,
-      },
-    );
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>> login({
-    required String username,
-    required String password,
-    Map<String, dynamic>? deviceInfo,
-  }) async {
-    final response = await _dio.post(
-      'auth/login',
-      data: {
-        'username': username,
-        'password': password,
-        'deviceInfo': deviceInfo,
-      },
-    );
-    return response.data;
-  }
-
-  Future<void> logout() async {
-    await _dio.post('auth/logout');
-    _token = null;
+    final response = await _dio.post('/api/auth/register', data: {
+      'username': username,
+      'display_name': displayName,
+      'password': password,
+      'email': email,
+    });
+    if (response.statusCode == 201) return response.data;
+    throw Exception(response.data['error'] ?? 'Registration failed');
   }
 
   Future<Map<String, dynamic>> getMe() async {
-    final response = await _dio.get('auth/me');
-    return response.data;
+    final response = await _dio.get('/api/auth/me');
+    if (response.statusCode == 200) return response.data;
+    throw Exception('Failed to get user profile');
   }
 
-  Future<List<dynamic>> searchUsers(String query) async {
-    final response = await _dio.get(
-      'auth/users/search',
-      queryParameters: {'q': query},
-    );
-    return response.data;
+  Future<void> logout() async {
+    await _dio.post('/api/auth/logout');
   }
 
-  Future<List<dynamic>> getOnlineUsers() async {
-    final response = await _dio.get('auth/users/online');
-    return response.data;
-  }
-
-  // ========== CHANNELS ==========
+  // --- Chat Data ---
 
   Future<List<dynamic>> getChannels() async {
-    final response = await _dio.get('channels');
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>> createChannel({
-    required String name,
-    String? description,
-    bool isPrivate = false,
-    List<String>? members,
-  }) async {
-    final response = await _dio.post(
-      'channels',
-      data: {
-        'name': name,
-        'description': description,
-        'isPrivate': isPrivate,
-        'members': members,
-      },
-    );
-    return response.data;
-  }
-
-  Future<List<dynamic>> getChannelMessages(
-    String channelId, {
-    int limit = 50,
-    String? before,
-  }) async {
-    final response = await _dio.get(
-      'channels/$channelId/messages',
-      queryParameters: {'limit': limit, 'before': before},
-    );
-    return response.data;
-  }
-
-  Future<List<dynamic>> getChannelMembers(String channelId) async {
-    final response = await _dio.get('channels/$channelId/members');
-    return response.data;
-  }
-
-  // ========== MESSAGES ==========
-
-  Future<List<dynamic>> getDirectMessages(
-    String userId, {
-    int limit = 50,
-  }) async {
-    final response = await _dio.get(
-      'messages/dm/$userId',
-      queryParameters: {'limit': limit},
-    );
-    return response.data;
+    final response = await _dio.get('/api/channels');
+    return response.data as List;
   }
 
   Future<List<dynamic>> getConversations() async {
-    final response = await _dio.get('messages/conversations');
-    return response.data;
+    final response = await _dio.get('/api/messages/conversations');
+    return response.data as List;
   }
 
-  Future<Map<String, dynamic>> sendDirectMessage({
-    required String receiverId,
-    required String content,
-    String? messageType,
-    Map<String, dynamic>? fileInfo,
-  }) async {
-    final response = await _dio.post(
-      'messages/dm',
-      data: {
-        'receiverId': receiverId,
-        'content': content,
-        'messageType': messageType ?? 'text',
-        'fileInfo': fileInfo,
-      },
-    );
-    return response.data;
+  Future<List<dynamic>> getOnlineUsers() async {
+    final response = await _dio.get('/api/users/online');
+    return response.data as List;
   }
 
-  Future<Map<String, dynamic>> sendChannelMessage({
-    required String channelId,
-    required String content,
-    String? messageType,
-    Map<String, dynamic>? fileInfo,
-  }) async {
-    final response = await _dio.post(
-      'channels/$channelId/messages',
-      data: {
-        'content': content,
-        'messageType': messageType ?? 'text',
-        'fileInfo': fileInfo,
-      },
-    );
-    return response.data;
+  Future<List<dynamic>> getChannelMessages(String channelId) async {
+    final response = await _dio.get('/api/channels/$channelId/messages');
+    return response.data as List;
   }
 
-  // ========== DISCOVERY ==========
-
-  Future<Map<String, dynamic>> getServerInfo() async {
-    final response = await _dio.get('discovery/server-info');
-    return response.data;
+  Future<List<dynamic>> getDirectMessages(String userId) async {
+    final response = await _dio.get('/api/messages/$userId');
+    return response.data as List;
   }
 
-  Future<void> registerDevice(Map<String, dynamic> deviceInfo) async {
-    await _dio.post('discovery/register', data: deviceInfo);
-  }
+  // --- Files ---
 
-  // ========== MEETINGS ==========
-
-  Future<List<dynamic>> getActiveMeetings() async {
-    final response = await _dio.get('meetings');
-    return response.data;
-  }
-
-  // ========== STATUS ==========
-
-  Future<Map<String, dynamic>> getServerStatus() async {
-    final response = await _dio.get('status');
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>> uploadFile(
-    String filePath,
-    String fileName,
-    String contentType,
-  ) async {
-    final file = await MultipartFile.fromFile(
-      filePath,
-      filename: fileName,
-      contentType: MediaType.parse(contentType),
-    );
-
+  Future<Map<String, dynamic>> uploadFile(String filePath, String fileName, String contentType) async {
     final formData = FormData.fromMap({
-      'file': file,
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+      ),
     });
 
-    final response = await _dio.post(
-      'files/upload',
-      data: formData,
-    );
-    return response.data;
+    final response = await _dio.post('/api/upload', data: formData);
+    if (response.statusCode == 200) return response.data;
+    throw Exception('Upload failed');
+  }
+
+  Future<List<dynamic>> getActiveMeetings() async {
+    final response = await _dio.get('/api/meetings/active');
+    return response.data as List;
   }
 }
-

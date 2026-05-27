@@ -1,30 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
+import 'core/providers/auth_provider.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/home_screen.dart';
-import 'core/providers/auth_provider.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Set system UI overlay style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppTheme.darkBg,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
-
-  // Preferred orientations
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
   runApp(const ProviderScope(child: TheBridgeApp()));
 }
 
@@ -38,19 +19,11 @@ class TheBridgeApp extends ConsumerWidget {
     return MaterialApp(
       title: 'The Bridge',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      home: authState.isLoading
-          ? const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            )
-          : authState.isAuthenticated
-              ? const HomeScreen()
-              : const LoginScreen(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) => const HomeScreen(),
-      },
+      themeMode: ThemeMode.dark,
+      darkTheme: AppTheme.darkTheme,
+      home: authState.isLoading 
+        ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+        : authState.isAuthenticated ? const HomeScreen() : const LoginScreen(),
     );
   }
 }
-

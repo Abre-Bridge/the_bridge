@@ -1,140 +1,79 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_provider.dart';
-import '../services/api_service.dart';
+import '../models/models.dart';
 
-// Provides the list of online users
-final onlineUsersProvider = FutureProvider<List<dynamic>>((ref) async {
-  final api = ref.watch(apiServiceProvider);
-  return api.getOnlineUsers();
+final onlineUsersProvider = FutureProvider<List<dynamic>>((ref) async => ref.read(apiServiceProvider).getOnlineUsers());
+final conversationsProvider = FutureProvider<List<dynamic>>((ref) async => ref.read(apiServiceProvider).getConversations());
+final channelsProvider = FutureProvider<List<dynamic>>((ref) async => ref.read(apiServiceProvider).getChannels());
+
+final chatMessagesProvider = StateNotifierProvider.family<ChatNotifier, List<Message>, Map<String, dynamic>>((ref, args) {
+  return ChatNotifier(ref, args['chatId'], args['isChannel']);
 });
 
-// Provides conversations (recent chats)
-final conversationsProvider = FutureProvider<List<dynamic>>((ref) async {
-  final api = ref.watch(apiServiceProvider);
-  return api.getConversations();
-});
+class ChatNotifier extends StateNotifier<List<Message>> {
+  final Ref _ref;
+  final String _chatId;
+  final bool _isChannel;
+  StreamSubscription? _sub;
 
-// Provides channels
-final channelsProvider = FutureProvider<List<dynamic>>((ref) async {
-  final api = ref.watch(apiServiceProvider);
-  return api.getChannels();
-});
-
-// StateNotifier for a specific chat's messages
-class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
-  final String chatId;
-  final bool isChannel;
-  final Ref ref;
-
-  ChatMessagesNotifier({
-    required this.chatId,
-    required this.isChannel,
-    required this.ref,
-  }) : super(const AsyncValue.loading()) {
-    _loadMessages();
-    _listenToSockets();
+  ChatNotifier(this._ref, this._chatId, this._isChannel) : super([]) {
+    _loadHistory();
+    _listen();
   }
 
-  Future<void> _loadMessages() async {
-    state = const AsyncValue.loading();
-    try {
-      final api = ref.read(apiServiceProvider);
-      List<dynamic> messages;
-      if (isChannel) {
-        messages = await api.getChannelMessages(chatId);
-      } else {
-        messages = await api.getDirectMessages(chatId);
-      }
-      state = AsyncValue.data(messages.reversed.toList());
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
+  Future<void> _loadHistory() async {
+    final api = _ref.read(apiServiceProvider);
+    final List<dynamic> data = _isChannel 
+      ? await api.getChannelMessages(_chatId)
+      : await api.getDirectMessages(_chatId);
+    state = data.map((m) => Message.fromJson(m)).toList();
   }
 
-  void _listenToSockets() {
-    final socketService = ref.read(socketServiceProvider);
-    
-    socketService.onMessage.listen((msg) {
-      if (isChannel && msg['channel_id'] == chatId) {
-        state = state.whenData((msgs) => [msg, ...msgs]);
-      }
-    });
-
-    socketService.onDirectMessage.listen((msg) {
-      if (!isChannel) {
-        final senderId = msg['sender_id'];
-        final receiverId = msg['receiver_id'];
-        if (senderId == chatId || receiverId == chatId) {
-          state = state.whenData((msgs) => [msg, ...msgs]);
+  void _listen() {
+    final socket = _ref.read(socketServiceProvider);
+    _sub = (_isChannel ? socket.onMessage : socket.onDirectMessage).listen((data) {
+      final isMatch = _isChannel 
+        ? data['channel_id'] == _chatId
+        : (data['sender_id'] == _chatId || data['receiver_id'] == _chatId);
+      
+      if (isMatch) {
+        final newMsg = Message.fromJson(data);
+        // Remove optimistic message if it exists
+        if (newMsg.clientId != null) {
+          state = state.where((m) => m.clientId != newMsg.clientId).toList();
         }
+        state = [...state, newMsg];
       }
     });
   }
 
-  void sendMessage(String content, {String messageType = 'text', Map<String, dynamic>? fileInfo}) {
-    final socketService = ref.read(socketServiceProvider);
-    final apiService = ref.read(apiServiceProvider);
-    
-    // Send via API first for persistence
-    try {
-      if (isChannel) {
-        apiService.sendChannelMessage(
-          channelId: chatId,
-          content: content,
-          messageType: messageType,
-          fileInfo: fileInfo,
-        );
-      } else {
-        apiService.sendDirectMessage(
-          receiverId: chatId,
-          content: content,
-          messageType: messageType,
-          fileInfo: fileInfo,
-        );
-      }
-    } catch (e) {
-      // If API fails, still try socket for real-time delivery
-      print('API send failed: $e');
-    }
+  void sendMessage(String content, {String type = 'text', Map<String, dynamic>? fileInfo}) {
+    final socket = _ref.read(socketServiceProvider);
+    final clientId = 'c_${DateTime.now().microsecondsSinceEpoch}';
 
-    // Send via socket for real-time delivery
-    if (isChannel) {
-      socketService.sendMessage(
-        channelId: chatId, 
-        content: content,
-        messageType: messageType,
-        fileInfo: fileInfo,
-      );
+    if (_isChannel) {
+      socket.sendMessage(channelId: _chatId, content: content, type: type, fileInfo: fileInfo, clientId: clientId);
     } else {
-      socketService.sendDirectMessage(
-        receiverId: chatId, 
-        content: content,
-        messageType: messageType,
-        fileInfo: fileInfo,
-      );
+      socket.sendDirectMessage(receiverId: _chatId, content: content, type: type, fileInfo: fileInfo, clientId: clientId);
     }
     
-    // Optimistic update
-    final me = ref.read(authProvider).user;
-    final optimisticMsg = {
-      'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      'content': content,
-      'sender_id': me?['id'],
-      'created_at': DateTime.now().toIso8601String(),
-      'message_type': messageType,
-      'file_info': fileInfo,
-      'isMe': true,
-    };
-    state = state.whenData((msgs) => [optimisticMsg, ...msgs]);
+    final me = _ref.read(authProvider).user;
+    final optimisticMsg = Message(
+      id: 'opt_$clientId',
+      senderId: me?['id'] ?? '',
+      content: content,
+      messageType: type,
+      createdAt: DateTime.now(),
+      sender: me,
+      clientId: clientId,
+    );
+    state = [...state, optimisticMsg];
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
   }
 }
-
-final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier, AsyncValue<List<dynamic>>, Map<String, dynamic>>(
-  (ref, args) {
-    return ChatMessagesNotifier(
-      chatId: args['chatId'] as String,
-      isChannel: args['isChannel'] as bool,
-      ref: ref,
-    );
-  },
-);

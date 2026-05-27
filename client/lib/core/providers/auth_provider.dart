@@ -6,138 +6,105 @@ import '../services/socket_service.dart';
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 final socketServiceProvider = Provider<SocketService>((ref) => SocketService());
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(
-    ref.read(apiServiceProvider),
-    ref.read(socketServiceProvider),
-  );
-});
-
 class AuthState {
   final bool isLoading;
   final bool isAuthenticated;
   final Map<String, dynamic>? user;
   final String? error;
 
-  AuthState({
-    this.isLoading = false,
-    this.isAuthenticated = false,
-    this.user,
-    this.error,
-  });
+  AuthState({this.isLoading = false, this.isAuthenticated = false, this.user, this.error});
 
-  AuthState copyWith({
-    bool? isLoading,
-    bool? isAuthenticated,
-    Map<String, dynamic>? user,
-    String? error,
-    bool clearError = false,
-  }) {
+  AuthState copyWith({bool? isLoading, bool? isAuthenticated, Map<String, dynamic>? user, String? error}) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       user: user ?? this.user,
-      error: clearError ? null : (error ?? this.error),
+      error: error,
     );
   }
 }
 
-class AuthNotifier extends StateNotifier<AuthState> {
-  final ApiService _apiService;
-  final SocketService _socketService;
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  return AuthNotifier(ref);
+});
 
-  AuthNotifier(this._apiService, this._socketService) : super(AuthState()) {
+class AuthNotifier extends StateNotifier<AuthState> {
+  final Ref _ref;
+  AuthNotifier(this._ref) : super(AuthState()) {
     checkAuth();
   }
 
   Future<void> checkAuth() async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(isLoading: true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      final api = _ref.read(apiServiceProvider);
+      await api.initialize();
       
-      if (token != null) {
-        await _apiService.initialize();
-        final userData = await _apiService.getMe();
-        _socketService.initialize(serverUrl: _apiService.serverUrl, token: token);
-        state = state.copyWith(isLoading: false, isAuthenticated: true, user: userData);
-      } else {
-        await _apiService.initialize();
-        state = state.copyWith(isLoading: false, isAuthenticated: false);
+      if (api.isInitialized) {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token');
+        if (token != null) {
+          final user = await api.getMe();
+          _ref.read(socketServiceProvider).initialize(serverUrl: api.serverUrl, token: token);
+          state = state.copyWith(isLoading: false, isAuthenticated: true, user: user);
+          return;
+        }
       }
+      state = state.copyWith(isLoading: false, isAuthenticated: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, isAuthenticated: false, error: e.toString());
     }
   }
 
   Future<bool> login(String username, String password) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(isLoading: true);
     try {
-      final response = await _apiService.login(username: username, password: password);
+      final api = _ref.read(apiServiceProvider);
+      final res = await api.login(username: username, password: password);
       
-      final token = response['token'];
-      final user = response['user'];
-
+      final token = res['token'];
+      final user = res['user'];
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('auth_token', token);
-
-      _apiService.setToken(token);
-      _socketService.initialize(serverUrl: _apiService.serverUrl, token: token);
-
-      state = state.copyWith(
-        isLoading: false,
-        isAuthenticated: true,
-        user: user,
-      );
+      
+      api.setToken(token);
+      _ref.read(socketServiceProvider).initialize(serverUrl: api.serverUrl, token: token);
+      
+      state = state.copyWith(isLoading: false, isAuthenticated: true, user: user);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, isAuthenticated: false, error: "Login failed: $e");
+      state = state.copyWith(isLoading: false, error: e.toString());
       return false;
     }
   }
 
-  Future<bool> register(String username, String displayName, String password, {String? email}) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+  Future<bool> register(String username, String displayName, String password) async {
+    state = state.copyWith(isLoading: true);
     try {
-      final response = await _apiService.register(
-        username: username,
-        displayName: displayName,
-        password: password,
-        email: email,
-      );
-
-      final token = response['token'];
-      final user = response['user'];
-
+      final api = _ref.read(apiServiceProvider);
+      final res = await api.register(username: username, displayName: displayName, password: password);
+      
+      final token = res['token'];
+      final user = res['user'];
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('auth_token', token);
-
-      _apiService.setToken(token);
-      _socketService.initialize(serverUrl: _apiService.serverUrl, token: token);
-
-      state = state.copyWith(
-        isLoading: false,
-        isAuthenticated: true,
-        user: user,
-      );
+      
+      api.setToken(token);
+      _ref.read(socketServiceProvider).initialize(serverUrl: api.serverUrl, token: token);
+      
+      state = state.copyWith(isLoading: false, isAuthenticated: true, user: user);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, isAuthenticated: false, error: "Registration failed: $e");
+      state = state.copyWith(isLoading: false, error: e.toString());
       return false;
     }
   }
 
-  Future<void> logout() async {
-    try {
-      await _apiService.logout();
-    } catch (_) {}
-    
+  void logout() async {
+    try { await _ref.read(apiServiceProvider).logout(); } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
-    
-    _apiService.setToken('');
-    _socketService.disconnect();
-    
-    state = state.copyWith(isAuthenticated: false, user: null, clearError: true);
+    _ref.read(socketServiceProvider).disconnect();
+    state = AuthState(isAuthenticated: false);
   }
 }
