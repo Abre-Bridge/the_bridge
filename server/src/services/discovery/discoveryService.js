@@ -26,6 +26,10 @@ class DiscoveryService {
 
         // Respond to mDNS queries for our service
         this.mdnsServer.on('query', (query) => {
+            if (query.questions && query.questions.length > 0) {
+                logger.debug(`Received mDNS query for: ${query.questions[0].name}`);
+            }
+            
             const isForUs = query.questions.some((q) => {
                 const name = q.name.toLowerCase();
                 const serviceName = config.mdns.serviceName.toLowerCase();

@@ -26,8 +26,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final servers = ref.watch(discoveredServersProvider).value ?? [];
     final currentUrl = ref.watch(apiServiceProvider).serverUrl;
+
+    // Listen for errors and show SnackBar
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (next.error != null && next.error != previous?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.error!), backgroundColor: Colors.redAccent),
+        );
+      }
+    });
     
     return Scaffold(
       body: SafeArea(
@@ -44,6 +54,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 16),
                     Text(_isRegister ? 'Create Account' : 'Welcome to The Bridge', 
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    if (authState.error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(authState.error!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                    ],
                     const SizedBox(height: 24),
                     
                     if (!_showManualIp) ...[

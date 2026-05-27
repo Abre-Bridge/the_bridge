@@ -4,6 +4,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import fs from 'fs';
 import path from 'path';
+import morgan from 'morgan';
+
 
 import config from './config/index.js';
 import logger from './utils/logger.js';
@@ -24,6 +26,11 @@ import apiRoutes from './routes/api.js';
 
 const app = express();
 const httpServer = createServer(app);
+
+// Use morgan for HTTP request logging
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
+    stream: { write: (message) => logger.info(message.trim()) }
+}));
 
 // Use a single Socket.IO instance on the HTTP server, avoiding the conflicting ports issue
 const io = new Server(httpServer, {
@@ -46,7 +53,15 @@ if (!fs.existsSync(uploadDir)) {
 }
 app.use('/uploads', express.static(uploadDir));
 
-// Routes
+// Health Check
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'online', 
+        message: 'TheBridge API is working',
+        timestamp: new Date().toISOString() 
+    });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/messages', messageRoutes);
