@@ -3,19 +3,25 @@ import os from 'os';
 import config from '../../config/index.js';
 import logger from '../../utils/logger.js';
 
+/**
+ * mDNS Discovery Service
+ *
+ * Advertises the server on the LAN so clients can auto-discover it.
+ * Also maintains a cross-VLAN device registry.
+ */
 class DiscoveryService {
     constructor() {
         this.mdnsServer = null;
-        this.registeredDevices = new Map(); // fingerprint -> device info
+        this.registeredDevices = new Map();
         this.serverInfo = null;
+        this._advertiseInterval = null;
     }
 
     /**
-     * Start mDNS service advertisement
-     * Broadcasts the server's presence on the local subnet
+     * Start mDNS advertisement + query responder
      */
     start() {
-        this.serverInfo = this._getServerInfo();
+        this.serverInfo = this._buildServerInfo();
         this.mdnsServer = mdns();
 
         // Respond to mDNS queries for our service
@@ -24,7 +30,6 @@ class DiscoveryService {
                 const name = q.name.toLowerCase();
                 const serviceName = config.mdns.serviceName.toLowerCase();
                 const serviceType = config.mdns.serviceType.toLowerCase();
-                
                 return (
                     name === `${serviceName}.local` ||
                     name === `${serviceName}.local.` ||
@@ -35,30 +40,30 @@ class DiscoveryService {
             });
 
             if (isForUs) {
-                this._respondToQuery();
+                this._advertise();
             }
         });
 
-        // Listen for other TheBridge instances (for clustering)
+        // Listen for peer TheBridge instances (for future clustering)
         this.mdnsServer.on('response', (response) => {
-            const thebridgeRecords = response.answers.filter(
+            const bridgeRecords = response.answers.filter(
                 (a) => a.name && a.name.includes(config.mdns.serviceName)
             );
-            if (thebridgeRecords.length > 0) {
-                logger.debug('Discovered TheBridge peer:', thebridgeRecords);
+            if (bridgeRecords.length > 0) {
+                logger.debug('Discovered TheBridge peer:', bridgeRecords);
             }
         });
 
-        // Advertise periodically
+        // Advertise immediately + periodically
         this._advertise();
         this._advertiseInterval = setInterval(() => this._advertise(), 30000);
 
-        logger.info(`mDNS discovery started — advertising as ${config.mdns.serviceName}.local`);
-        logger.info(`Server interfaces: ${JSON.stringify(this.serverInfo.addresses)}`);
+        logger.info(`🔍 mDNS discovery started — advertising as ${config.mdns.serviceName}.local`);
+        logger.info(`   Server IPs: ${this.serverInfo.addresses.join(', ')}`);
     }
 
     /**
-     * Broadcast server advertisement via mDNS
+     * Broadcast mDNS advertisement with server address + port info
      */
     _advertise() {
         if (!this.mdnsServer) return;
@@ -75,7 +80,7 @@ class DiscoveryService {
                 name: instanceName,
                 type: 'SRV',
                 data: {
-                    port: config.server.apiPort,
+                    port: config.server.port,
                     target: `${config.mdns.serviceName}.local`,
                 },
             },
@@ -83,16 +88,14 @@ class DiscoveryService {
                 name: instanceName,
                 type: 'TXT',
                 data: [
-                    `api_port=${config.server.apiPort}`,
-                    `ws_port=${config.server.wsPort}`,
-                    `signaling_port=${config.server.signalingPort}`,
+                    `port=${config.server.port}`,
                     `version=1.0.0`,
                     `name=TheBridge Server`,
                 ],
             },
         ];
 
-        // Add all server IP addresses
+        // Add A records for every interface IP
         this.serverInfo.addresses.forEach((addr) => {
             answers.push({
                 name: `${config.mdns.serviceName}.local`,
@@ -105,16 +108,11 @@ class DiscoveryService {
         this.mdnsServer.respond({ answers });
     }
 
-    _respondToQuery() {
-        this._advertise();
-    }
-
     /**
-     * Register a device in the cross-VLAN registry
+     * Register a client device (cross-VLAN registry)
      */
     registerDevice(deviceInfo) {
-        const { fingerprint, userId, ipAddress, subnet, vlanId, capabilities } = deviceInfo;
-
+        const { fingerprint } = deviceInfo;
         this.registeredDevices.set(fingerprint, {
             ...deviceInfo,
             lastSeen: Date.now(),
@@ -122,8 +120,7 @@ class DiscoveryService {
                 ? this.registeredDevices.get(fingerprint).registeredAt
                 : Date.now(),
         });
-
-        logger.info(`Device registered: ${fingerprint} on subnet ${subnet} (VLAN ${vlanId})`);
+        logger.info(`Device registered: ${fingerprint}`);
         return true;
     }
 
@@ -132,21 +129,16 @@ class DiscoveryService {
      */
     getDevices(subnet = null) {
         const devices = Array.from(this.registeredDevices.values());
-        if (subnet) {
-            return devices.filter((d) => d.subnet === subnet);
-        }
-        return devices;
+        return subnet ? devices.filter((d) => d.subnet === subnet) : devices;
     }
 
     /**
-     * Get devices reachable from a specific subnet (for P2P optimization)
+     * Get peers reachable from a given device
      */
     getPeersForDevice(fingerprint) {
         const device = this.registeredDevices.get(fingerprint);
         if (!device) return [];
-
-        const allDevices = Array.from(this.registeredDevices.values());
-        return allDevices
+        return Array.from(this.registeredDevices.values())
             .filter((d) => d.fingerprint !== fingerprint)
             .map((d) => ({
                 ...d,
@@ -156,14 +148,14 @@ class DiscoveryService {
     }
 
     /**
-     * Remove stale devices (not seen in 5 minutes)
+     * Remove devices not seen in 5 minutes
      */
     cleanupStaleDevices() {
-        const staleThreshold = Date.now() - 5 * 60 * 1000;
-        for (const [fingerprint, device] of this.registeredDevices) {
-            if (device.lastSeen < staleThreshold) {
-                this.registeredDevices.delete(fingerprint);
-                logger.info(`Removed stale device: ${fingerprint}`);
+        const cutoff = Date.now() - 5 * 60 * 1000;
+        for (const [fp, dev] of this.registeredDevices) {
+            if (dev.lastSeen < cutoff) {
+                this.registeredDevices.delete(fp);
+                logger.info(`Removed stale device: ${fp}`);
             }
         }
     }
@@ -181,44 +173,28 @@ class DiscoveryService {
     }
 
     /**
-     * Get server network information
+     * Build server info object
      */
-    _getServerInfo() {
-        const interfaces = os.networkInterfaces();
-        const addresses = [];
-
-        for (const [name, addrs] of Object.entries(interfaces)) {
-            for (const addr of addrs) {
-                if (addr.family === 'IPv4' && !addr.internal) {
-                    addresses.push(addr.address);
-                }
-            }
-        }
-
+    _buildServerInfo() {
         return {
             hostname: os.hostname(),
-            addresses,
+            addresses: config.server.addresses,
             platform: os.platform(),
-            apiPort: config.server.apiPort,
-            wsPort: config.server.wsPort,
-            signalingPort: config.server.signalingPort,
+            port: config.server.port,
+            version: '1.0.0',
         };
     }
 
     /**
-     * Get server connection info for clients
+     * Return server connection info for REST clients
      */
     getServerInfo() {
         return this.serverInfo;
     }
 
     stop() {
-        if (this._advertiseInterval) {
-            clearInterval(this._advertiseInterval);
-        }
-        if (this.mdnsServer) {
-            this.mdnsServer.destroy();
-        }
+        if (this._advertiseInterval) clearInterval(this._advertiseInterval);
+        if (this.mdnsServer) this.mdnsServer.destroy();
         logger.info('mDNS discovery stopped');
     }
 }

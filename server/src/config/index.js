@@ -1,13 +1,32 @@
 import 'dotenv/config';
+import os from 'os';
+
+/**
+ * Centralized server configuration.
+ * All values are env-driven with sensible defaults.
+ */
+
+// Detect all non-loopback IPv4 addresses for discovery
+function getServerAddresses() {
+    const interfaces = os.networkInterfaces();
+    const addresses = [];
+    for (const [, addrs] of Object.entries(interfaces)) {
+        for (const addr of addrs) {
+            if (addr.family === 'IPv4' && !addr.internal) {
+                addresses.push(addr.address);
+            }
+        }
+    }
+    return addresses;
+}
 
 const config = {
     env: process.env.NODE_ENV || 'development',
 
     server: {
         host: process.env.SERVER_HOST || '0.0.0.0',
-        apiPort: parseInt(process.env.API_PORT || '3001'),
-        wsPort: parseInt(process.env.API_PORT || '3001'),
-        signalingPort: parseInt(process.env.API_PORT || '3001'),
+        port: parseInt(process.env.API_PORT || '3000'),
+        addresses: getServerAddresses(),
     },
 
     postgres: {
@@ -25,15 +44,6 @@ const config = {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD || undefined,
-    },
-
-    minio: {
-        endPoint: process.env.MINIO_ENDPOINT || 'localhost',
-        port: parseInt(process.env.MINIO_PORT || '9000'),
-        useSSL: false,
-        accessKey: process.env.MINIO_ACCESS_KEY || 'thebridge',
-        secretKey: process.env.MINIO_SECRET_KEY || 'change_me',
-        bucket: process.env.MINIO_BUCKET || 'thebridge-files',
     },
 
     jwt: {
@@ -56,11 +66,7 @@ const config = {
     fileTransfer: {
         maxSize: process.env.MAX_FILE_SIZE || '500MB',
         chunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
-    },
-
-    tls: {
-        certPath: process.env.TLS_CERT_PATH || './certs/server.crt',
-        keyPath: process.env.TLS_KEY_PATH || './certs/server.key',
+        uploadDir: process.env.UPLOAD_DIR || './uploads',
     },
 
     logging: {

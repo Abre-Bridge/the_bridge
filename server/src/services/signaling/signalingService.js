@@ -4,47 +4,38 @@ import logger from '../../utils/logger.js';
 
 /**
  * WebRTC Signaling Service
- *
- * Handles:
- * - Room management for video meetings
- * - ICE candidate exchange
- * - SDP offer/answer relay
- * - TURN credential generation
- * - Multi-party conferencing support
+ * Handles room management, ICE/SDP relay, and TURN credential generation.
  */
 class SignalingService {
     constructor() {
         this.io = null;
-        this.rooms = new Map(); // roomId -> { participants: Map, host: userId, createdAt }
-        this.userRooms = new Map(); // userId -> roomId
+        this.rooms = new Map();
+        this.userRooms = new Map();
     }
 
     initialize(io) {
         this.io = io;
         this._setupSignalingHandlers();
-        logger.info('WebRTC signaling service initialized');
+        logger.info('📹 WebRTC signaling service initialized');
     }
 
     _setupSignalingHandlers() {
         this.io.on('connection', (socket) => {
             const userId = socket.user.userId;
             const username = socket.user.username;
-
             logger.info(`Signaling client connected: ${username}`);
 
-            // Create a new meeting room
             socket.on('room:create', (data, callback) => {
                 try {
                     const roomId = data.roomId || this._generateRoomId();
-                    const room = {
+                    this.rooms.set(roomId, {
                         id: roomId,
                         title: data.title || 'Meeting',
                         host: userId,
                         participants: new Map(),
                         createdAt: Date.now(),
                         maxParticipants: data.maxParticipants || 50,
-                    };
-                    this.rooms.set(roomId, room);
+                    });
                     logger.info(`Room created: ${roomId} by ${username}`);
                     callback({ success: true, roomId });
                 } catch (error) {
@@ -52,161 +43,106 @@ class SignalingService {
                 }
             });
 
-            // Join a meeting room
             socket.on('room:join', (data, callback) => {
                 try {
                     const { roomId } = data;
                     const room = this.rooms.get(roomId);
+                    if (!room) return callback({ success: false, error: 'Room not found' });
+                    if (room.participants.size >= room.maxParticipants) return callback({ success: false, error: 'Room is full' });
 
-                    if (!room) {
-                        return callback({ success: false, error: 'Room not found' });
-                    }
-
-                    if (room.participants.size >= room.maxParticipants) {
-                        return callback({ success: false, error: 'Room is full' });
-                    }
-
-                    // Join the socket room
                     socket.join(`meeting:${roomId}`);
-
-                    // Add participant
                     room.participants.set(userId, {
-                        userId,
-                        username,
-                        socketId: socket.id,
-                        joinedAt: Date.now(),
-                        audio: true,
-                        video: true,
+                        userId, username, socketId: socket.id,
+                        joinedAt: Date.now(), audio: true, video: true,
                     });
-
                     this.userRooms.set(userId, roomId);
 
-                    // Notify existing participants
                     socket.to(`meeting:${roomId}`).emit('room:peer_joined', {
-                        userId,
-                        username,
+                        userId, username,
                         participants: this._getParticipantList(roomId),
                     });
 
                     callback({
-                        success: true,
-                        roomId,
+                        success: true, roomId,
                         participants: this._getParticipantList(roomId),
                         iceServers: this._getIceServers(userId),
                     });
-
                     logger.info(`${username} joined room ${roomId}`);
                 } catch (error) {
                     callback({ success: false, error: error.message });
                 }
             });
 
-            // Leave a meeting room
-            socket.on('room:leave', () => {
-                this._handleLeaveRoom(socket, userId, username);
-            });
+            socket.on('room:leave', () => this._handleLeaveRoom(socket, userId, username));
 
-            // WebRTC Signaling: Send offer
+            // SDP / ICE relay
             socket.on('signal:offer', (data) => {
-                const { targetUserId, offer } = data;
                 const room = this.rooms.get(this.userRooms.get(userId));
-                if (room) {
-                    const target = room.participants.get(targetUserId);
-                    if (target) {
-                        this.io.to(target.socketId).emit('signal:offer', {
-                            fromUserId: userId,
-                            fromUsername: username,
-                            offer,
-                        });
-                    }
-                }
-            });
-
-            // WebRTC Signaling: Send answer
-            socket.on('signal:answer', (data) => {
-                const { targetUserId, answer } = data;
-                const room = this.rooms.get(this.userRooms.get(userId));
-                if (room) {
-                    const target = room.participants.get(targetUserId);
-                    if (target) {
-                        this.io.to(target.socketId).emit('signal:answer', {
-                            fromUserId: userId,
-                            answer,
-                        });
-                    }
-                }
-            });
-
-            // WebRTC Signaling: ICE candidate exchange
-            socket.on('signal:ice_candidate', (data) => {
-                const { targetUserId, candidate } = data;
-                const room = this.rooms.get(this.userRooms.get(userId));
-                if (room) {
-                    const target = room.participants.get(targetUserId);
-                    if (target) {
-                        this.io.to(target.socketId).emit('signal:ice_candidate', {
-                            fromUserId: userId,
-                            candidate,
-                        });
-                    }
-                }
-            });
-
-            // Toggle audio
-            socket.on('media:toggle_audio', (data) => {
-                const roomId = this.userRooms.get(userId);
-                if (roomId) {
-                    const room = this.rooms.get(roomId);
-                    const participant = room?.participants.get(userId);
-                    if (participant) {
-                        participant.audio = data.enabled;
-                        socket.to(`meeting:${roomId}`).emit('media:audio_toggled', {
-                            userId,
-                            enabled: data.enabled,
-                        });
-                    }
-                }
-            });
-
-            // Toggle video
-            socket.on('media:toggle_video', (data) => {
-                const roomId = this.userRooms.get(userId);
-                if (roomId) {
-                    const room = this.rooms.get(roomId);
-                    const participant = room?.participants.get(userId);
-                    if (participant) {
-                        participant.video = data.enabled;
-                        socket.to(`meeting:${roomId}`).emit('media:video_toggled', {
-                            userId,
-                            enabled: data.enabled,
-                        });
-                    }
-                }
-            });
-
-            // Screen sharing
-            socket.on('media:screen_share', (data) => {
-                const roomId = this.userRooms.get(userId);
-                if (roomId) {
-                    socket.to(`meeting:${roomId}`).emit('media:screen_share', {
-                        userId,
-                        username,
-                        sharing: data.sharing,
+                const target = room?.participants.get(data.targetUserId);
+                if (target) {
+                    this.io.to(target.socketId).emit('signal:offer', {
+                        fromUserId: userId, fromUsername: username, offer: data.offer,
                     });
                 }
             });
 
-            // Disconnect
-            socket.on('disconnect', () => {
-                this._handleLeaveRoom(socket, userId, username);
+            socket.on('signal:answer', (data) => {
+                const room = this.rooms.get(this.userRooms.get(userId));
+                const target = room?.participants.get(data.targetUserId);
+                if (target) {
+                    this.io.to(target.socketId).emit('signal:answer', {
+                        fromUserId: userId, answer: data.answer,
+                    });
+                }
             });
+
+            socket.on('signal:ice_candidate', (data) => {
+                const room = this.rooms.get(this.userRooms.get(userId));
+                const target = room?.participants.get(data.targetUserId);
+                if (target) {
+                    this.io.to(target.socketId).emit('signal:ice_candidate', {
+                        fromUserId: userId, candidate: data.candidate,
+                    });
+                }
+            });
+
+            // Media toggles
+            socket.on('media:toggle_audio', (data) => {
+                const roomId = this.userRooms.get(userId);
+                if (!roomId) return;
+                const p = this.rooms.get(roomId)?.participants.get(userId);
+                if (p) {
+                    p.audio = data.enabled;
+                    socket.to(`meeting:${roomId}`).emit('media:audio_toggled', { userId, enabled: data.enabled });
+                }
+            });
+
+            socket.on('media:toggle_video', (data) => {
+                const roomId = this.userRooms.get(userId);
+                if (!roomId) return;
+                const p = this.rooms.get(roomId)?.participants.get(userId);
+                if (p) {
+                    p.video = data.enabled;
+                    socket.to(`meeting:${roomId}`).emit('media:video_toggled', { userId, enabled: data.enabled });
+                }
+            });
+
+            socket.on('media:screen_share', (data) => {
+                const roomId = this.userRooms.get(userId);
+                if (roomId) {
+                    socket.to(`meeting:${roomId}`).emit('media:screen_share', {
+                        userId, username, sharing: data.sharing,
+                    });
+                }
+            });
+
+            socket.on('disconnect', () => this._handleLeaveRoom(socket, userId, username));
         });
     }
 
     _handleLeaveRoom(socket, userId, username) {
         const roomId = this.userRooms.get(userId);
         if (!roomId) return;
-
         const room = this.rooms.get(roomId);
         if (!room) return;
 
@@ -214,19 +150,14 @@ class SignalingService {
         this.userRooms.delete(userId);
         socket.leave(`meeting:${roomId}`);
 
-        // Notify remaining participants
         this.io.to(`meeting:${roomId}`).emit('room:peer_left', {
-            userId,
-            username,
-            participants: this._getParticipantList(roomId),
+            userId, username, participants: this._getParticipantList(roomId),
         });
 
-        // Clean up empty rooms
         if (room.participants.size === 0) {
             this.rooms.delete(roomId);
             logger.info(`Room ${roomId} deleted (empty)`);
         }
-
         logger.info(`${username} left room ${roomId}`);
     }
 
@@ -234,31 +165,20 @@ class SignalingService {
         const room = this.rooms.get(roomId);
         if (!room) return [];
         return Array.from(room.participants.values()).map((p) => ({
-            userId: p.userId,
-            username: p.username,
-            audio: p.audio,
-            video: p.video,
-            joinedAt: p.joinedAt,
+            userId: p.userId, username: p.username,
+            audio: p.audio, video: p.video, joinedAt: p.joinedAt,
         }));
     }
 
-    /**
-     * Generate TURN credentials (time-limited)
-     */
     _getIceServers(userId) {
-        const timestamp = Math.floor(Date.now() / 1000) + 86400; // 24h TTL
+        const timestamp = Math.floor(Date.now() / 1000) + 86400;
         const turnUsername = `${timestamp}:${userId}`;
         const hmac = crypto.createHmac('sha1', config.turn.secret);
         hmac.update(turnUsername);
         const turnCredential = hmac.digest('base64');
-
         return [
             { urls: config.turn.stunServer },
-            {
-                urls: config.turn.server,
-                username: turnUsername,
-                credential: turnCredential,
-            },
+            { urls: config.turn.server, username: turnUsername, credential: turnCredential },
         ];
     }
 
@@ -270,9 +190,7 @@ class SignalingService {
         const room = this.rooms.get(roomId);
         if (!room) return null;
         return {
-            id: room.id,
-            title: room.title,
-            host: room.host,
+            id: room.id, title: room.title, host: room.host,
             participantCount: room.participants.size,
             participants: this._getParticipantList(roomId),
             createdAt: room.createdAt,
@@ -281,11 +199,8 @@ class SignalingService {
 
     getActiveRooms() {
         return Array.from(this.rooms.entries()).map(([id, room]) => ({
-            id,
-            title: room.title,
-            host: room.host,
-            participantCount: room.participants.size,
-            createdAt: room.createdAt,
+            id, title: room.title, host: room.host,
+            participantCount: room.participants.size, createdAt: room.createdAt,
         }));
     }
 }
