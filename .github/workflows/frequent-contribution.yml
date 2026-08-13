@@ -39,7 +39,7 @@ jobs:
 
       - name: Commit changes
         run: |
-          git add logs/maintenance.md
+          git add -f logs/maintenance.md
 
           if git diff --cached --quiet; then
             echo "No changes detected."
